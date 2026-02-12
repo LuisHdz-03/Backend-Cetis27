@@ -1,0 +1,271 @@
+
+generator client {
+ provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+//usuarios y roles.
+
+model Usuario{
+  idUsuario Int @id @default(autoincrement())
+  nombre String
+  apellidoPaterno String
+  apellidoMaterno String
+  email String @unique
+  password String
+  rol String
+  activo Boolean @default(true)
+
+  creadoEn DateTime @default(now())
+
+  telefono String?
+  direccion String?
+  fechaNacimiento DateTime?
+
+  perfilDocente Docente?
+  perfilEstudiante Estudiante?
+  perfilAdministrativo Administrativo?
+
+  bitacoras Bitacora[]
+
+  @@map("usuarios")
+}
+
+model Docente{
+  idDocente Int @id @default(autoincrement())
+  numeroEmpleado String?
+
+  usuarioId Int @unique
+  usuario Usuario @relation(fields: [usuarioId], references: [idUsuario])
+  clases Clase[]
+  reportesHechos Reporte[] @relation("ReportadoPor")
+
+  @@map("docentes")
+}
+
+
+model Estudiante{
+
+  idEstudiante Int @id @default(autoincrement())
+  matricula String @unique
+  semestre Int
+  curp String @unique
+
+  fotoUrl String?
+  fechaIngreso DateTime? @default(now())
+  datosVerificados Boolean @default(false)
+  
+
+  credencialFechaEmision    DateTime?  
+  credencialFechaExpiracion DateTime? 
+
+  usuarioId Int @unique
+  usuario Usuario @relation(fields: [usuarioId], references: [idUsuario])
+
+  grupoId Int?
+  grupo Grupo? @relation(fields: [grupoId], references: [idGrupo])
+
+  tutorId Int?
+  tutor Tutor? @relation(fields: [tutorId],references: [idTutor])
+
+  acceso Aceesos[]
+  nota Nota[]
+
+  asistencias Asistencia[]
+  reportes Reporte[] @relation("ReporteAlumno")
+
+  @@map("estudiantes")
+}
+
+model Periodo{
+  idPeriodo Int @id @default(autoincrement())
+  nombre String
+  codigo String?
+  fechaInicio DateTime
+  fechaFin DateTime
+  activo Boolean @default(true)
+
+  grupos Grupo[]
+
+  @@map("periodos")
+}
+
+model Especialidad {
+  idEspecialidad Int     @id @default(autoincrement())
+  nombre         String  
+  codigo         String  
+  
+  grupos         Grupo[]
+  materias       Materia[] 
+
+  @@map("especialidades")
+}
+model Tutor{
+  idTutor Int @id @default(autoincrement())
+  nombre String 
+  apellidoPaterno String
+  apellidoMaterno String
+  telefono String
+  email String? 
+  parentesco String
+
+  estudiantes Estudiante[]
+  @@map("tutores")
+} 
+enum Turno {
+  MATUTINO
+  VESPERTINO
+  MIXTO
+}
+model Grupo {
+  idGrupo        Int          @id @default(autoincrement())
+  nombre         String      
+  grado          Int          
+  turno          Turno       
+  aula           String?      
+  
+  periodoId      Int
+  especialidadId Int
+  
+  periodo        Periodo      @relation(fields: [periodoId], references: [idPeriodo])
+  especialidad   Especialidad @relation(fields: [especialidadId], references: [idEspecialidad])
+
+  estudiantes    Estudiante[]
+  clases         Clase[]
+
+  @@map("grupos")
+}
+
+model Materia {
+  idMateria      Int     @id @default(autoincrement())
+  nombre         String
+  codigo         String?
+  horasSemana    Int?    
+  semestre       Int?    
+
+ 
+  especialidadId Int?
+  especialidad   Especialidad? @relation(fields: [especialidadId], references: [idEspecialidad])
+
+  clases         Clase[]
+
+  @@map("materias")
+}
+
+model Clase{
+  idClase Int @id @default(autoincrement())
+  grupoId Int
+  materiaId Int
+  docenteId Int
+
+  horario Json?
+
+  grupo Grupo @relation(fields: [grupoId],references: [idGrupo])
+  materias Materia @relation(fields: [materiaId], references: [idMateria])
+  docente Docente @relation(fields: [docenteId], references: [idDocente])
+
+  asistencias Asistencia[]
+  notas Nota[]
+
+  @@map("clases")
+}
+
+model Asistencia{
+  idAsistencia Int @id @default(autoincrement())
+
+  fecha DateTime @default(now())
+  estatus String
+
+  claseId Int
+  alumnoId Int 
+
+  clase Clase @relation(fields: [claseId], references: [idClase])
+  alumno Estudiante @relation(fields: [alumnoId],references: [idEstudiante])
+
+  @@map("asistencias")
+}
+
+model Reporte {
+  idReporte       Int      @id @default(autoincrement())
+  titulo          String
+  descripcion     String   
+  tipoIncidencia  String   
+  nivel           String   
+  fecha           DateTime @default(now())
+  estatus         String   @default("PENDIENTE")
+  accionesTomadas String?  
+
+  alumnoId    Int
+  docenteId   Int
+
+  alumno      Estudiante @relation("ReporteAlumno", fields: [alumnoId], references: [idEstudiante])
+  docente     Docente    @relation("ReportadoPor", fields: [docenteId], references: [idDocente])
+
+  @@map("reportes")
+}
+
+model Aceesos{
+  idAcceso Int @id @default(autoincrement())
+  fechaHora DateTime @default(now())
+  tipo String
+  alumnoId Int
+  alumno Estudiante @relation(fields: [alumnoId],references: [idEstudiante])
+
+  @@map("accesos")
+}
+
+model Bitacora{
+  idBitacora Int @id @default(autoincrement())
+  accion String
+  detalle String
+  fecha DateTime @default(now())
+
+  usuarioId Int
+  usuario Usuario @relation(fields: [usuarioId], references: [idUsuario])
+
+  @@map("bitacoras")
+}
+
+model Administrativo{
+  idAdministrativo Int @id @default(autoincrement())
+  numeroEmpleado String?
+  cargo String
+  area String
+
+  usuarioId Int @unique
+  usuario Usuario @relation(fields: [usuarioId], references: [idUsuario])
+}
+
+model TipoEvaluacion{
+  idTipo Int @id @default(autoincrement())
+  nombre String
+  orden Int
+  peso Float @default(1.0)
+  activo Boolean @default(true)
+
+  notas Nota[]
+  @@map("tipos_evaluacion")
+}
+
+model Nota{
+  idNota Int @id @default(autoincrement())
+  valor Float
+  faltas Int @default(0)
+  fechaCaptura DateTime @default(now())
+
+  alumnoId Int
+  claseId Int
+  tipoEvaluacionId Int
+
+  alumno Estudiante @relation(fields: [alumnoId], references: [idEstudiante])
+  clase Clase @relation(fields: [claseId], references: [idClase])
+  tipo TipoEvaluacion @relation(fields: [tipoEvaluacionId], references: [idTipo])
+
+  @@unique([alumnoId,claseId, tipoEvaluacionId])
+  @@map("notas")
+
+} 
