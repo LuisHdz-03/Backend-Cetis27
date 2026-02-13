@@ -111,4 +111,8 @@ const uploadFotiko = async (req, res) => {
   }
 };
 
+const actualizartutor = async (req,res)=>{
+  
+}
+
 module.exports = { getAlumnosMovil, uploadFotiko };
