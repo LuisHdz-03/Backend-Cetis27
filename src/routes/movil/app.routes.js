@@ -7,6 +7,7 @@ const { login } = require("../../controller/auth/authController");
 const {
   getAlumnosMovil,
   uploadFotiko,
+  actualizartutor,
 } = require("../../controller/movil/estudianteMoController");
 
 router.get("/", (req, res) => {
@@ -18,5 +19,6 @@ router.use(verificarToken);
 
 router.get("/perfil", getAlumnosMovil);
 router.put("/perfil/foto", uploads.single("fotoPerfil"), uploadFotiko);
+router.post("/perfil/tutor", actualizartutor);
 
 module.exports = router;

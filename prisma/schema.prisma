@@ -112,6 +112,7 @@ model Tutor{
   telefono String
   email String? 
   parentesco String
+  direccion String?
 
   estudiantes Estudiante[]
   @@map("tutores")

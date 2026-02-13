@@ -19,14 +19,18 @@ const getAlumnosMovil = async (req, res) => {
             apellidoPaterno: true,
             apellidoMaterno: true,
             email: true,
+            telefono: true,
+            direccion: true,
           },
         },
         tutor: {
           select: {
             nombre: true,
             apellidoPaterno: true,
+            apellidoMaterno: true,
             telefono: true,
             parentesco: true,
+            direccion: true,
           },
         },
         grupo: {
@@ -56,9 +60,9 @@ const uploadFotiko = async (req, res) => {
     }
 
     const idUsuario = req.usuario.id;
-    const nombreAcrchivo = `perfil-${idUsuario}-${Date.now()}.jpeg`;
+    const nombreArchivo = `perfil-${idUsuario}-${Date.now()}.jpeg`;
     const carpetaUploads = path.join(__dirname, "../../../public/uploads");
-    const rutasCompletas = path.join(carpetaUploads, nombreAcrchivo);
+    const rutasCompletas = path.join(carpetaUploads, nombreArchivo);
 
     if (!fs.existsSync(carpetaUploads)) {
       fs.mkdirSync(carpetaUploads, { recursive: true });
@@ -72,7 +76,7 @@ const uploadFotiko = async (req, res) => {
       .jpeg({ quality: 80 })
       .toFile(rutasCompletas);
 
-    const nuevaFtUrl = `/uploads/${nombreAcrchivo}`;
+    const nuevaFtUrl = `/uploads/${nombreArchivo}`;
 
     const estudiantePrevio = await prisma.estudiante.findUnique({
       where: {
@@ -87,13 +91,13 @@ const uploadFotiko = async (req, res) => {
         : estudiantePrevio.fotoUrl;
 
       const pathViejo = path.join(__dirname, "../../../public", nombreViejo);
-      if (fs.existsSync(pathViejo)) {
-        try {
-          fs.unlinkSync(pathViejo);
-          console.log(`Foto eliminada: ${pathViejo}`);
-        } catch (e) {
+
+      try {
+        fs.unlinkSync(pathViejo);
+        console.log(`Foto eliminada: ${pathViejo}`);
+      } catch (e) {
+        if (e.code !== "ENOENT")
           console.error("Error al borrar foto vieja:", e);
-        }
       }
     }
     const estudianteActualizado = await prisma.estudiante.update({
@@ -102,7 +106,7 @@ const uploadFotiko = async (req, res) => {
     });
 
     res.json({
-      mensjae: "Foto actualizada correctamente",
+      mensaje: "Foto actualizada correctamente",
       fotoUrl: estudianteActualizado.fotoUrl,
     });
   } catch (error) {
@@ -111,8 +115,68 @@ const uploadFotiko = async (req, res) => {
   }
 };
 
-const actualizartutor = async (req,res)=>{
-  
-}
+const actualizartutor = async (req, res) => {
+  try {
+    const idUsuario = req.usuario.id;
+    const {
+      nombre,
+      apellidoPaterno,
+      apellidoMaterno,
+      telefono,
+      parentesco,
+      email,
+      direccion,
+    } = req.body;
 
-module.exports = { getAlumnosMovil, uploadFotiko };
+    if (!nombre || !apellidoPaterno || !telefono || !parentesco) {
+      return res.status(400).json({
+        error:
+          "Faltan datos obligatorios (Nombre, Apellido, Teléfono, Parentesco).",
+      });
+    }
+
+    const estudiante = await prisma.estudiante.findUnique({
+      where: { usuarioId: idUsuario },
+      select: { idEstudiante: true, tutorId: true },
+    });
+
+    if (!estudiante) {
+      return res.status(404).json({ error: "Estudiante no encontrado." });
+    }
+
+    if (estudiante.tutorId !== null) {
+      return res.status(403).json({
+        error:
+          "Ya tienes un tutor registrado. Para realizar cambios, acude a Control Escolar.",
+      });
+    }
+
+    const estudianteActualizado = await prisma.estudiante.update({
+      where: { idEstudiante: estudiante.idEstudiante },
+      data: {
+        tutor: {
+          create: {
+            nombre,
+            apellidoPaterno,
+            apellidoMaterno,
+            telefono,
+            parentesco,
+            email: email || null,
+            direccion: direccion || null,
+          },
+        },
+      },
+      include: { tutor: true },
+    });
+
+    res.json({
+      mensaje: "Tutor registrado correctamente. Esta acción es permanente.",
+      tutor: estudianteActualizado.tutor,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error al registrar el tutor." });
+  }
+};
+
+module.exports = { getAlumnosMovil, uploadFotiko, actualizartutor };
