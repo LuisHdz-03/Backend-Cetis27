@@ -4,7 +4,7 @@ const { verificarToken } = require("../../middlewares/authMiddleware");
 
 const {
   getAlumnosMovil,
-} = require("../../controller/movil/estuudianteMoController");
+} = require("../../controller/movil/estudianteMoController");
 
 router.get("/perfil", verificarToken, getAlumnosMovil);
 
