@@ -207,13 +207,11 @@ const getCredencial = async (req, res) => {
     if (!estudiante)
       return res.status(404).json({ error: "Estudiante no encontrado" });
 
-    const datosQR = JSON.stringify({
-      matricula: estudiante.matricula,
-      nombre: `${estudiante.usuario.nombre} ${estudiante.usuario.apellidoPaterno}`,
-      tipo: "ALUMNO",
-    });
+    const tiempoActual = Date.now();
+    const datosQR = `${estudiante.matricula}|${tiempoActual}`;
 
     const qrImage = await QRCode.toDataURL(datosQR);
+
     const formatearFechaMesAnio = (fecha) => {
       if (!fecha) return "Por definir";
       const meses = [
@@ -312,7 +310,7 @@ const getAsistencias = async (req, res) => {
 
     const historialLimpio = asistencias.map((a) => ({
       fecha: a.fecha,
-      estado: a.estado,
+      estatus: a.estatus,
       materia: a.clase.materias.nombre,
       docente: `${a.clase.docente.usuario.nombre} ${a.clase.docente.usuario.apellidoPaterno}`,
     }));
