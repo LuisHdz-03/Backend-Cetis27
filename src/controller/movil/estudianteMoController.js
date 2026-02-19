@@ -2,6 +2,7 @@ const { PrismaClient } = require("@prisma/client");
 const path = require("path");
 const sharp = require("sharp");
 const fs = require("fs");
+const QRCode = require("qrcode");
 const prisma = new PrismaClient();
 
 const getAlumnosMovil = async (req, res) => {
@@ -179,4 +180,115 @@ const actualizartutor = async (req, res) => {
   }
 };
 
-module.exports = { getAlumnosMovil, uploadFotiko, actualizartutor };
+const getCredencial = async (req, res) => {
+  try {
+    const idUsuario = req.usuario.id;
+
+    const estudiante = await prisma.estudiante.findUnique({
+      where: { usuarioId: idUsuario },
+      include: {
+        usuario: {
+          select: {
+            nombre: true,
+            apellidoPaterno: true,
+            apellidoMaterno: true,
+          },
+          grupo: { select: { nombre: true } },
+        },
+      },
+    });
+
+    if (!estudiante)
+      return res.status(404).json({ error: "estudiante no econtrado" });
+
+    const datosQr = JSON.stringify({
+      matricula: estudiante.matricula,
+      nombre: `${estudiante.usuario.nombre} ${estudiante.usuario.apellidoPaterno} ${estudiante.usuario.apellidoMaterno}`,
+      grupo: estudiante.grupo?.nombre,
+      tipo: "ALUMNO",
+      validado: true,
+    });
+
+    const imgQr = await QRCode.toDataURL(datosQr);
+
+    res.json({
+      matricula: estudiante.matricula,
+      grupo: estudiante.grupo?.nombre,
+      imagenQr: imgQr,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error al generar la credencial" });
+  }
+};
+
+const getHistorialAccesos = async (req, res) => {
+  try {
+    const idUsuario = req.usuario.id;
+
+    const estudiante = await prisma.estudiante.findUnique({
+      where: { usuarioId: idUsuario },
+      select: { idEstudiante: true },
+    });
+
+    const accesos = await prisma.aceesos.findMany({
+      where: { alumnoId: estudiante.idEstudiante },
+      orderBy: { fecha: "desc" },
+      take: 20,
+    });
+
+    res.json(accesos);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error al obtener los accesos " });
+  }
+};
+
+const getAsistencias = async (req, res) => {
+  try {
+    const idUsuario = req.usuario.id;
+    const estudiante = await prisma.estudiante.findUnique({
+      where: { usuarioId: idUsuario },
+      select: { idEstudiante: true },
+    });
+
+    const asistencias = await prisma.asistencia.findMany({
+      where: { alumnoId: estudiante.idEstudiante },
+      include: {
+        clase: {
+          include: {
+            materias: {
+              select: { nombre: true },
+            },
+            docente: {
+              include: {
+                usuario: { select: { nombre: true, apellidoPaterno: true } },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { fecha: "desc" },
+      take: 50,
+    });
+
+    const historialLimpio = asistencias.map((a) => ({
+      fecha: a.fecha,
+      estado: a.estado,
+      materia: a.clase.materias.nombre,
+      docente: `${a.clase.docente.usuario.nombre} ${a.clase.docente.usuario.apellidoPaterno}`,
+    }));
+    res.json(historialLimpio);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error al obtener las asistencias" });
+  }
+};
+module.exports = {
+  getAlumnosMovil,
+  uploadFotiko,
+  actualizartutor,
+  getCredencial,
+  getAsistencias,
+  getHistorialAccesos,
+};

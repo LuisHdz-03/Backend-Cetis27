@@ -8,6 +8,10 @@ const {
   getAlumnosMovil,
   uploadFotiko,
   actualizartutor,
+  getAsistencias,
+  getCredencial,
+  getHistorialAccesos,
+  getHistorialAccesos,
 } = require("../../controller/movil/estudianteMoController");
 
 router.get("/", (req, res) => {
@@ -20,5 +24,10 @@ router.use(verificarToken);
 router.get("/perfil", getAlumnosMovil);
 router.put("/perfil/foto", uploads.single("fotoPerfil"), uploadFotiko);
 router.post("/perfil/tutor", actualizartutor);
+
+router.get("/credencial", getCredencial);
+
+router.get("/accesos", getHistorialAccesos);
+router.get("/asistencia", getAsistencias);
 
 module.exports = router;
