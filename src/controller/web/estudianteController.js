@@ -33,6 +33,10 @@ const crearEstudiante = async (req, res) => {
         },
       });
 
+      const fechaEmisionAuto = new Date();
+      const fechaExpiracionAuto = new Date();
+      fechaExpiracionAuto.setFullYear(fechaEmisionAuto.getFullYear() + 3);
+
       const nuevoEstudiante = await tx.estudiante.create({
         data: {
           matricula,
@@ -40,6 +44,8 @@ const crearEstudiante = async (req, res) => {
           semestre: parseInt(semestre),
           usuarioId: nuevoUsuario.idUsuario,
           grupoId: grupoId ? parseInt(grupoId) : null,
+          credencialFechaEmision: fechaEmisionAuto,
+          credencialFechaExpiracion: fechaExpiracionAuto,
         },
       });
 
@@ -104,6 +110,10 @@ const cargarDatosMasivos = async (req, res) => {
 
     const errores = [];
     const datosInsertados = [];
+
+    const fechaEmisionAuto = new Date();
+    const fechaExpiracionAuto = new Date();
+    fechaExpiracionAuto.setFullYear(fechaEmisionAuto.getFullYear() + 3);
 
     for (const fila of datosExcel) {
       const carreraExcel = fila["CARRERA"];
@@ -177,6 +187,9 @@ const cargarDatosMasivos = async (req, res) => {
               usuarioId: nuevoUsuario.idUsuario,
 
               grupoId: grupoEncontrado.idGrupo,
+
+              credencialFechaEmision: fechaEmisionAuto,
+              credencialFechaExpiracion: fechaExpiracionAuto,
             },
           });
         });
@@ -203,4 +216,37 @@ const cargarDatosMasivos = async (req, res) => {
   }
 };
 
-module.exports = { crearEstudiante, getEstudiantes, cargarDatosMasivos };
+const actualizarEstudiante = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { credencialFechaEmision, credencialFechaExpiracion } = req.body;
+
+    const dataActualizar = {};
+    if (credencialFechaEmision)
+      dataActualizar.credencialFechaEmision = new Date(credencialFechaEmision);
+    if (credencialFechaExpiracion)
+      dataActualizar.credencialFechaExpiracion = new Date(
+        credencialFechaExpiracion,
+      );
+
+    const estudianteActualizado = await prisma.estudiante.update({
+      where: { idEstudiante: parseInt(id) },
+      data: dataActualizar,
+    });
+
+    res.json({
+      mensaje: "Fechas de credencial actualizadas correctamente",
+      estudiante: estudianteActualizado,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error al actualizar el estudiante" });
+  }
+};
+
+module.exports = {
+  crearEstudiante,
+  getEstudiantes,
+  cargarDatosMasivos,
+  actualizarEstudiante,
+};

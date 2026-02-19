@@ -12,7 +12,7 @@ router.use("/auth", require("./authRouter"));
 // Gestión Académica
 router.use("/estudiantes", require("./estudiantesRoute"));
 router.use("/docentes", require("./docenteRoute"));
-router.use("/administrativos", require("./adminsRoutes")); // OJO: Checa si en el front usas "admins" o "administrativos"
+router.use("/administrativos", require("./adminsRoutes"));
 router.use("/grupos", require("./grupoRoute"));
 router.use("/materias", require("./materiasRoute"));
 router.use("/clases", require("./claseRoute"));
