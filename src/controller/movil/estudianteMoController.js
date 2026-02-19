@@ -194,31 +194,69 @@ const getCredencial = async (req, res) => {
             apellidoMaterno: true,
           },
         },
-        grupo: { select: { nombre: true } },
+        grupo: {
+          select: {
+            nombre: true,
+            turno: true,
+            especialidad: { select: { nombre: true } },
+          },
+        },
       },
     });
 
     if (!estudiante)
-      return res.status(404).json({ error: "estudiante no econtrado" });
+      return res.status(404).json({ error: "Estudiante no encontrado" });
 
-    const datosQr = JSON.stringify({
+    const datosQR = JSON.stringify({
       matricula: estudiante.matricula,
-      nombre: `${estudiante.usuario.nombre} ${estudiante.usuario.apellidoPaterno} ${estudiante.usuario.apellidoMaterno}`,
-      grupo: estudiante.grupo?.nombre,
+      nombre: `${estudiante.usuario.nombre} ${estudiante.usuario.apellidoPaterno}`,
       tipo: "ALUMNO",
-      validado: true,
     });
 
-    const imgQr = await QRCode.toDataURL(datosQr);
+    const qrImage = await QRCode.toDataURL(datosQR);
+    const formatearFechaMesAnio = (fecha) => {
+      if (!fecha) return "Por definir";
+      const meses = [
+        "enero",
+        "febrero",
+        "marzo",
+        "abril",
+        "mayo",
+        "junio",
+        "julio",
+        "agosto",
+        "septiembre",
+        "octubre",
+        "noviembre",
+        "diciembre",
+      ];
+      const mes = meses[fecha.getMonth()];
+      const anio = fecha.getFullYear();
+      return `${mes} ${anio}`;
+    };
+
+    const fechaEmisionFormateada = formatearFechaMesAnio(
+      estudiante.credencialFechaEmision,
+    );
+    const fechaExpiracionFormateada = formatearFechaMesAnio(
+      estudiante.credencialFechaExpiracion,
+    );
 
     res.json({
-      matricula: estudiante.matricula,
-      grupo: estudiante.grupo?.nombre,
-      imagenQr: imgQr,
+      nombreCompleto: `${estudiante.usuario.nombre} ${estudiante.usuario.apellidoPaterno} ${estudiante.usuario.apellidoMaterno}`,
+      curp: estudiante.curp,
+      noControl: estudiante.matricula,
+      especialidad:
+        estudiante.grupo?.especialidad?.nombre || "Sin Especialidad Asignada",
+
+      turno: estudiante.grupo?.turno || "Sin Turno",
+      emision: fechaEmisionFormateada,
+      vigencia: fechaExpiracionFormateada,
+      qrImage: qrImage,
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: "Error al generar la credencial" });
+    res.status(500).json({ error: "Error al generar la credencial." });
   }
 };
 
