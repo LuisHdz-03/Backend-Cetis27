@@ -23,6 +23,11 @@ const registrarAcceso = async (req, res) => {
 
     const alumno = await prisma.estudiante.findUnique({
       where: { matricula: matricula },
+      include: {
+        usuario: {
+          select: { nombre: true, apellidoPaterno: true },
+        },
+      },
     });
 
     if (!alumno) {
@@ -62,7 +67,7 @@ const registrarAcceso = async (req, res) => {
     res.json({
       mensaje: `Registro exitoso: ${nuevoTipo}`,
       tipo: nuevoTipo,
-      alumno: alumno.nombre,
+      alumno: `${alumno.usuario.nombre} ${alumno.usuario.apellidoPaterno}`,
       matricula: matricula,
       hora: new Date(),
     });
