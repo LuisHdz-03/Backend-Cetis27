@@ -87,7 +87,7 @@ const getEstudiantes = async (req, res) => {
     res.json(estudiantes);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ erro: "erro al optener los alumnos" });
+    res.status(500).json({ erro: "Error al obtener los alumnos" });
   }
 };
 
