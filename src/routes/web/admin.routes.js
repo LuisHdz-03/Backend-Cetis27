@@ -1,4 +1,5 @@
 const { Router } = require("express");
+const { verificarToken } = require("../../middlewares/authMiddleware");
 const router = Router();
 
 // Ruta base de prueba (GET /api/web)
@@ -8,6 +9,8 @@ router.get("/", (req, res) => {
 
 // Autenticación
 router.use("/auth", require("./authRouter"));
+
+router.use(verificarToken);
 
 // Gestión Académica
 router.use("/estudiantes", require("./estudiantesRoute"));
