@@ -193,8 +193,8 @@ const getCredencial = async (req, res) => {
             apellidoPaterno: true,
             apellidoMaterno: true,
           },
-          grupo: { select: { nombre: true } },
         },
+        grupo: { select: { nombre: true } },
       },
     });
 
@@ -233,7 +233,7 @@ const getHistorialAccesos = async (req, res) => {
 
     const accesos = await prisma.aceesos.findMany({
       where: { alumnoId: estudiante.idEstudiante },
-      orderBy: { fecha: "desc" },
+      orderBy: { fechaHora: "desc" },
       take: 20,
     });
 

@@ -11,7 +11,6 @@ const {
   getAsistencias,
   getCredencial,
   getHistorialAccesos,
-  getHistorialAccesos,
 } = require("../../controller/movil/estudianteMoController");
 
 router.get("/", (req, res) => {
