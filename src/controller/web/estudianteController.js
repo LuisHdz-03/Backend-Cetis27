@@ -244,9 +244,34 @@ const actualizarEstudiante = async (req, res) => {
   }
 };
 
+const eliminarEstudiante = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const estudiante = await prisma.estudiante.findUnique({
+      where: { idEstudiante: parseInt(id) },
+    });
+
+    if (!estudiante) {
+      return res.status(404).json({ error: "Estudiante no encontrado" });
+    }
+
+    await prisma.estudiante.update({
+      where: { idUsuario: estudiante.idEstudiante },
+      data: { activo: false },
+    });
+
+    res.json({ mensaje: "Estudiante dado de baja correctamente  " });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Erro al dar de baja al estudiante" });
+  }
+};
+
 module.exports = {
   crearEstudiante,
   getEstudiantes,
   cargarDatosMasivos,
   actualizarEstudiante,
+  eliminarEstudiante,
 };

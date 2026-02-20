@@ -47,4 +47,26 @@ const getMateria = async (req, res) => {
   }
 };
 
-module.exports = { crearMateria, getMateria };
+const eliminarMateria = async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.materia.delete({
+      where: {
+        idMateria: parseInt(id),
+      },
+    });
+
+    res.json({ mensaje: "Materia eliminada correctamente" });
+  } catch (error) {
+    console.error(error);
+    if (error.code === "P2003") {
+      return res.status(400).json({
+        error:
+          "No se puede eliminar la materia por que esta asisgnada a un grupo",
+      });
+    }
+    res.status(500).json({ error: "Error al eliminar la materia" });
+  }
+};
+
+module.exports = { crearMateria, getMateria, eliminarMateria };

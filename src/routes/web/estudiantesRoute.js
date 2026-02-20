@@ -9,11 +9,13 @@ const {
   getEstudiantes,
   cargarDatosMasivos,
   actualizarEstudiante,
+  eliminarEstudiante,
 } = require("../../controller/web/estudianteController");
 
 router.post("/", crearEstudiante);
 router.get("/", getEstudiantes);
 router.post("/masivo", upload.single("archivoExcel"), cargarDatosMasivos);
 router.put("/:id", actualizarEstudiante);
+router.delete("/:id", eliminarEstudiante);
 
 module.exports = router;

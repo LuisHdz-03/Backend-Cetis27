@@ -84,4 +84,22 @@ const getGrupoById = async (req, res) => {
   }
 };
 
-module.exports = { crearGrupo, getGrupos, getGrupoById };
+const eliminarGrupo = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    await prisma.grupo.delete({
+      where: { idGrupo: parseInt(id) },
+    });
+    res.json({ mensaje: "Grupo eliminado correctamente" });
+  } catch (error) {
+    console.error(error);
+    if (error.code === "P2003") {
+      return res.status(400).json({
+        error: "No se puede eliminar el grupo por que hay alumnos asignados",
+      });
+    }
+    res.status(500).json({ error: "Error al eliminar el grupo" });
+  }
+};
+module.exports = { crearGrupo, getGrupos, getGrupoById, eliminarGrupo };
