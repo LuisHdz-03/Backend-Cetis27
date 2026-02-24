@@ -3,20 +3,27 @@ const prisma = new PrismaClient();
 
 const crearPeriodo = async (req, res) => {
   try {
-    const { nombre, codigo, fechaInicio, fechaFin } = req.body;
+    const { nombre, codigo, fechaInicio, fechaFin, activo } = req.body;
+    const seraActivo = activo !== undefined ? activo : true;
 
+    if (seraActivo) {
+      await prisma.periodo.updateMany({
+        data: { activo: false },
+      });
+    }
     const nuevoPeriodo = await prisma.periodo.create({
       data: {
         nombre,
-        codigo,
+        codigo: codigo || nombre.substring(0, 4).toUpperCase(),
         fechaInicio: new Date(fechaInicio),
         fechaFin: new Date(fechaFin),
-        activo: false,
+        activo: seraActivo,
       },
     });
 
     res.status(201).json(nuevoPeriodo);
   } catch (error) {
+    console.error("Error al crear periodo:", error);
     res.status(500).json({ error: "Error al crear periodo." });
   }
 };
