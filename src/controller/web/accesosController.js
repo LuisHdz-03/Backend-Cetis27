@@ -91,6 +91,11 @@ const getAccesos = async (req, res) => {
                 apellidoMaterno: true,
               },
             },
+            grupo: {
+              select: {
+                nombre: true,
+              },
+            },
           },
         },
       },

@@ -26,6 +26,8 @@ model Usuario{
   direccion String?
   fechaNacimiento DateTime?
 
+  curp String @unique
+
   perfilDocente Docente?
   perfilEstudiante Estudiante?
   perfilAdministrativo Administrativo?
@@ -53,7 +55,6 @@ model Estudiante{
   idEstudiante Int @id @default(autoincrement())
   matricula String @unique
   semestre Int
-  curp String @unique
 
   fotoUrl String?
   fechaIngreso DateTime? @default(now())
