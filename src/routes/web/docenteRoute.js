@@ -1,5 +1,6 @@
 const { Router } = require("express");
 const router = Router();
+const multer = require("multer");
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
@@ -8,7 +9,6 @@ const {
   getDocentes,
   cargarDocentesMasivos,
 } = require("../../controller/web/docenteController");
-const multer = require("multer");
 
 router.post("/", crearDocente);
 router.get("/", getDocentes);

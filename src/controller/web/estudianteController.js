@@ -3,6 +3,31 @@ const bcrypt = require("bcryptjs");
 const XLSX = require("xlsx");
 const prisma = new PrismaClient();
 
+// logica para limpiar la matricula
+const limpiarMatricula = (valor) => {
+  const numStr = String(valor);
+  if (/[eE]/.test(numStr)) {
+    return parseFloat(numStr).toFixed(0);
+  }
+  return numStr.trim();
+};
+
+// se calcula la fecha de naciento con la curp
+const extraerFechaDesdeCURP = (curp) => {
+  if (!curp || curp.length < 10) return null;
+  try {
+    const aa = curp.substring(4, 6);
+    const mm = curp.substring(6, 8);
+    const dd = curp.substring(8, 10);
+    const year = parseInt(aa);
+    const fullYear = year <= 30 ? 2000 + year : 1900 + year;
+    const fecha = new Date(`${fullYear}-${mm}-${dd}`);
+    return isNaN(fecha.getTime()) ? null : fecha;
+  } catch (e) {
+    return null;
+  }
+};
+
 const crearEstudiante = async (req, res) => {
   try {
     const {
@@ -15,6 +40,8 @@ const crearEstudiante = async (req, res) => {
       grupoId,
     } = req.body;
 
+    const matriculaLimpia = limpiarMatricula(matricula);
+    const fechaNac = extraerFechaDesdeCURP(curp);
     const emailGenerado = `${curp.substring(0, 10).toLowerCase()}@cetis27.edu.mx`;
 
     const salt = await bcrypt.genSalt(10);
@@ -27,6 +54,8 @@ const crearEstudiante = async (req, res) => {
           apellidoPaterno,
           apellidoMaterno,
           email: emailGenerado,
+          curp: curp.trim().toUpperCase(),
+          fechaNacimiento: fechaNac,
           password: hashedPassword,
           rol: "ALUMNO",
           activo: true,
@@ -39,8 +68,7 @@ const crearEstudiante = async (req, res) => {
 
       const nuevoEstudiante = await tx.estudiante.create({
         data: {
-          matricula,
-          curp,
+          matricula: matriculaLimpia,
           semestre: parseInt(semestre),
           usuarioId: nuevoUsuario.idUsuario,
           grupoId: grupoId ? parseInt(grupoId) : null,
@@ -78,6 +106,8 @@ const getEstudiantes = async (req, res) => {
             apellidoMaterno: true,
             email: true,
             activo: true,
+            fechaNacimiento: true,
+            curp: true,
           },
         },
         grupo: {
@@ -134,11 +164,14 @@ const cargarDatosMasivos = async (req, res) => {
         continue;
       }
 
-      try {
-        const turnoQuery = fila["TURNO"]
-          ? fila["TURNO"].toUpperCase()
-          : "MATUTINO";
+      const matriculaLimpia = limpiarMatricula(matriculaExcel);
+      const fechaNac = extraerFechaDesdeCURP(curpExcel);
+      const emailGenerado = `${curpExcel.substring(0, 10).toLowerCase()}@cetis27.edu.mx`;
 
+      const turnoQuery = fila["TURNO"]
+        ? fila["TURNO"].toUpperCase()
+        : "MATUTINO";
+      try {
         const grupoEncontrado = await prisma.grupo.findFirst({
           where: {
             nombre: fila["GRUPO"].toString(),
@@ -161,10 +194,8 @@ const cargarDatosMasivos = async (req, res) => {
           continue;
         }
 
-        const emailGenerado = `${curpExcel.substring(0, 10).toLowerCase()}@cetis27.edu.mx`;
-        const matriculaString = String(matriculaExcel);
         const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(matriculaString, salt);
+        const hashedPassword = await bcrypt.hash(matriculaLimpia, salt);
 
         await prisma.$transaction(async (tx) => {
           const nuevoUsuario = await tx.usuario.create({
