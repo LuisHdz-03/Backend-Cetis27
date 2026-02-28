@@ -123,7 +123,19 @@ const getAdministrativos = async (req, res) => {
         },
       },
     });
-    res.json(admins);
+
+    const dataFormateada = admins.map((a) => ({
+      id: a.idAdministrativo,
+      nombre: `${a.usuario.nombre} ${a.usuario.apellidoPaterno} ${a.usuario.apellidoMaterno}`,
+      email: a.usuario.email,
+      cargo: a.cargo,
+      area: a.area,
+      numEmpleado: a.numeroEmpleado,
+      rol: a.usuario.rol,
+      activo: a.usuario.activo,
+    }));
+
+    res.json(dataFormateada);
   } catch (error) {
     res.status(500).json({ error: "Error al obtener lista." });
   }
@@ -222,8 +234,34 @@ const cargarAdministrativosMasivos = async (req, res) => {
   }
 };
 
+const asignarMateria = async (req, res) => {
+  try {
+    const { docenteId, materiaId, grupoId, periodoId, horario } = req.body;
+
+    const nuevaClase = await prisma.clase.create({
+      data: {
+        docenteId: parseInt(docenteId),
+        materiaId: parseInt(materiaId),
+        grupoId: parseInt(grupoId),
+        periodoId: parseInt(periodoId),
+        horario: horario,
+      },
+    });
+
+    res.status(201).json({
+      ok: true,
+      msg: "Materia asignada correctamente",
+      clase: nuevaClase,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ ok: false, msg: "Error al realizar la asignación" });
+  }
+};
+
 module.exports = {
   crearAdministrativo,
   getAdministrativos,
   cargarAdministrativosMasivos,
+  asignarMateria,
 };

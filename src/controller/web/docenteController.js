@@ -110,6 +110,13 @@ const getDocentes = async (req, res) => {
             activo: true,
           },
         },
+        clases: {
+          include: {
+            materias: true,
+            grupo: true,
+            periodo,
+          },
+        },
         _count: {
           select: { clases: true },
         },

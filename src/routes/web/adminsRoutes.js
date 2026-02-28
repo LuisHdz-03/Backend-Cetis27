@@ -8,10 +8,12 @@ const {
   crearAdministrativo,
   getAdministrativos,
   cargarAdministrativosMasivos,
+  asignarMateria,
 } = require("../../controller/web/administrativoController");
 
 router.post("/", crearAdministrativo);
 router.get("/", getAdministrativos);
+router.post("/asignar-materia", asignarMateria);
 router.post(
   "/masivos",
   upload.single("archivosExcel"),
