@@ -99,33 +99,38 @@ const getDocentes = async (req, res) => {
   try {
     const docentes = await prisma.docente.findMany({
       include: {
-        usuario: {
-          select: {
-            nombre: true,
-            apellidoPaterno: true,
-            apellidoMaterno: true,
-            email: true,
-            curp: true,
-            fechaNacimiento: true,
-            activo: true,
-          },
-        },
+        usuario: true, // Traemos el objeto completo para evitar errores de selección
         clases: {
           include: {
             materias: true,
             grupo: true,
-            periodo,
           },
-        },
-        _count: {
-          select: { clases: true },
         },
       },
     });
-    res.json(docentes);
+
+    // Transformamos los datos para que el Frontend los reciba "aplanados"
+    const dataFormateada = docentes.map((d) => ({
+      id: d.idDocente,
+      nombre: d.usuario?.nombre || "Sin nombre",
+      apellidoPaterno: d.usuario?.apellidoPaterno || "",
+      apellidoMaterno: d.usuario?.apellidoMaterno || "",
+      email: d.usuario?.email || "N/A",
+      curp: d.usuario?.curp || "N/A",
+      fechaNacimiento: d.usuario?.fechaNacimiento || null,
+      activo: d.usuario?.activo ?? true,
+      numeroEmpleado: d.numeroEmpleado || "N/A",
+      especialidad: d.clases[0]?.materias?.nombre || "Docente General",
+    }));
+
+    res.json(dataFormateada);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Error al obtener la lista de docentes" });
+    console.error("ERROR DETECTADO EN DOCENTES:", error);
+    res.status(500).json({
+      ok: false,
+      error:
+        "Error interno: Revisa que todos los docentes tengan un usuario vinculado.",
+    });
   }
 };
 
