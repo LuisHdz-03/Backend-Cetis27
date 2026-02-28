@@ -91,6 +91,7 @@ model Periodo{
   activo Boolean @default(true)
 
   grupos Grupo[]
+  clase Clase[]
 
   @@map("periodos")
 }
@@ -163,12 +164,14 @@ model Clase{
   grupoId Int
   materiaId Int
   docenteId Int
+  periodoId Int
 
   horario Json?
 
   grupo Grupo @relation(fields: [grupoId],references: [idGrupo])
   materias Materia @relation(fields: [materiaId], references: [idMateria])
   docente Docente @relation(fields: [docenteId], references: [idDocente])
+  periodo  Periodo? @relation(fields: [periodoId], references: [idPeriodo])
 
   asistencias Asistencia[]
   notas Nota[]
@@ -196,7 +199,7 @@ model Reporte {
   titulo          String
   descripcion     String   
   tipoIncidencia  String   
-  nivel           String   
+  nivel           String  
   fecha           DateTime @default(now())
   estatus         String   @default("PENDIENTE")
   accionesTomadas String?  
