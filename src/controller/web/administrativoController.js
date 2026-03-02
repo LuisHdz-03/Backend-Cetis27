@@ -40,6 +40,7 @@ const crearAdministrativo = async (req, res) => {
       area,
       numeroEmpleado,
       rol,
+      telefono,
     } = req.body;
 
     const rolesPermitidos = ["ADMINISTRATIVO", "DIRECTIVO", "GUARDIA"];
@@ -73,6 +74,7 @@ const crearAdministrativo = async (req, res) => {
           password: hashedPassword,
           rol: rolAsignar,
           activo: true,
+          telefono,
         },
       });
 

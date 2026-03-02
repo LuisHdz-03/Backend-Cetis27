@@ -38,6 +38,8 @@ const crearEstudiante = async (req, res) => {
       matricula,
       semestre,
       grupoId,
+      telefono,
+      direccion,
     } = req.body;
 
     const matriculaLimpia = limpiarMatricula(matricula);
@@ -57,6 +59,8 @@ const crearEstudiante = async (req, res) => {
           curp: curp.trim().toUpperCase(),
           fechaNacimiento: fechaNac,
           password: hashedPassword,
+          telefono,
+          direccion,
           rol: "ALUMNO",
           activo: true,
         },

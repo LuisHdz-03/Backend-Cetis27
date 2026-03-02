@@ -39,6 +39,8 @@ const crearDocente = async (req, res) => {
       curp,
       numeroEmpleado,
       password,
+      telefono,
+      direccion,
     } = req.body;
 
     const numEmpleadoLimpio = limpiarMatricula(numeroEmpleado);
@@ -59,6 +61,9 @@ const crearDocente = async (req, res) => {
           curp: curp.trim().toUpperCase(),
           fechaNacimiento: fechaNac,
           password: hashedPassword,
+          telefono,
+          direccion,
+          idEspecialidad,
           rol: "DOCENTE",
           activo: true,
         },
@@ -68,6 +73,7 @@ const crearDocente = async (req, res) => {
         data: {
           numeroEmpleado: numEmpleadoLimpio,
           usuarioId: nuevoUsuario.idUsuario,
+          especialidadId: idEspecialidad ? parseInt(idEspecialidad) : null,
         },
       });
 
@@ -99,7 +105,8 @@ const getDocentes = async (req, res) => {
   try {
     const docentes = await prisma.docente.findMany({
       include: {
-        usuario: true, // Traemos el objeto completo para evitar errores de selección
+        usuario: true,
+        especialidad: true,
         clases: {
           include: {
             materias: true,
@@ -119,7 +126,6 @@ const getDocentes = async (req, res) => {
       curp: d.usuario?.curp || "N/A",
       telefono: d.usuario?.telefono || "N/A",
       numeroEmpleado: d.numeroEmpleado || "N/A",
-      // Si quieres que no diga "Docente General", puedes sacar la especialidad real:
       especialidad: d.clases[0]?.materias?.nombre || "General",
       activo: d.usuario?.activo ?? true,
     }));
