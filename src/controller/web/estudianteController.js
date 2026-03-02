@@ -91,6 +91,7 @@ const crearEstudiante = async (req, res) => {
     if (error.code === "P2002") {
       return res.status(400).json({ error: "El alumno ya existe " });
     }
+    console.error(error);
     res.status(500).json({ error: "error en el servidor" });
   }
 };
@@ -115,6 +116,7 @@ const getEstudiantes = async (req, res) => {
             nombre: true,
             grado: true,
             turno: true,
+            especialidad: true,
           },
         },
       },

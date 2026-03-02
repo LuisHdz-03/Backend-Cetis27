@@ -112,15 +112,16 @@ const getDocentes = async (req, res) => {
     // Transformamos los datos para que el Frontend los reciba "aplanados"
     const dataFormateada = docentes.map((d) => ({
       id: d.idDocente,
-      nombre: d.usuario?.nombre || "Sin nombre",
+      nombre: d.usuario?.nombre,
       apellidoPaterno: d.usuario?.apellidoPaterno || "",
       apellidoMaterno: d.usuario?.apellidoMaterno || "",
       email: d.usuario?.email || "N/A",
       curp: d.usuario?.curp || "N/A",
-      fechaNacimiento: d.usuario?.fechaNacimiento || null,
-      activo: d.usuario?.activo ?? true,
+      telefono: d.usuario?.telefono || "N/A",
       numeroEmpleado: d.numeroEmpleado || "N/A",
-      especialidad: d.clases[0]?.materias?.nombre || "Docente General",
+      // Si quieres que no diga "Docente General", puedes sacar la especialidad real:
+      especialidad: d.clases[0]?.materias?.nombre || "General",
+      activo: d.usuario?.activo ?? true,
     }));
 
     res.json(dataFormateada);
@@ -219,5 +220,159 @@ const cargarDocentesMasivos = async (req, res) => {
     res.status(500).json({ ok: false, msg: "Error interno del servidor" });
   }
 };
+const eliminarDocente = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const docenteId = parseInt(id);
 
-module.exports = { crearDocente, getDocentes, cargarDocentesMasivos };
+    if (isNaN(docenteId)) {
+      return res
+        .status(400)
+        .json({ ok: false, error: "ID de docente inválido" });
+    }
+
+    const docente = await prisma.docente.findUnique({
+      where: { idDocente: docenteId },
+    });
+
+    if (!docente) {
+      return res
+        .status(404)
+        .json({ ok: false, error: "Docente no encontrado" });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.docente.delete({
+        where: { idDocente: docenteId },
+      });
+
+      await tx.usuario.delete({
+        where: { idUsuario: docente.usuarioId },
+      });
+    });
+
+    res.json({ ok: true, mensaje: "Docente eliminado correctamente" });
+  } catch (error) {
+    console.error("Error al eliminar docente:", error);
+
+    if (error.code === "P2003") {
+      return res.status(400).json({
+        ok: false,
+        error:
+          "No se puede eliminar el docente porque tiene materias o clases asignadas.",
+      });
+    }
+
+    res.status(500).json({
+      ok: false,
+      error: "Error interno al intentar eliminar al docente",
+    });
+  }
+};
+
+const actualizarDocente = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const docenteId = parseInt(id);
+
+    if (isNaN(docenteId)) {
+      return res
+        .status(400)
+        .json({ ok: false, error: "ID de docente inválido" });
+    }
+
+    const docenteActual = await prisma.docente.findUnique({
+      where: { idDocente: docenteId },
+    });
+
+    if (!docenteActual) {
+      return res
+        .status(404)
+        .json({ ok: false, error: "Docente no encontrado" });
+    }
+
+    const {
+      nombre,
+      apellidoPaterno,
+      apellidoMaterno,
+      curp,
+      numeroEmpleado,
+      password,
+      activo,
+      telefono,
+      direccion,
+      idEspecialidad,
+    } = req.body;
+
+    const usuarioData = {};
+    if (nombre) usuarioData.nombre = nombre;
+    if (apellidoPaterno !== undefined)
+      usuarioData.apellidoPaterno = apellidoPaterno;
+    if (apellidoMaterno !== undefined)
+      usuarioData.apellidoMaterno = apellidoMaterno;
+    if (telefono !== undefined) usuarioData.telefono = telefono;
+    if (direccion !== undefined) usuarioData.direccion = direccion;
+    if (activo !== undefined) usuarioData.activo = activo;
+
+    if (curp) {
+      usuarioData.curp = curp.trim().toUpperCase();
+      usuarioData.fechaNacimiento = extraerFechaDesdeCURP(curp);
+    }
+
+    if (password) {
+      const salt = await bcrypt.genSalt(10);
+      usuarioData.password = await bcrypt.hash(password, salt);
+    }
+
+    const docenteData = {};
+    if (numeroEmpleado) {
+      docenteData.numeroEmpleado = limpiarMatricula(numeroEmpleado);
+    }
+
+    if (idEspecialidad !== undefined) {
+      docenteData.especialidadId = idEspecialidad
+        ? parseInt(idEspecialidad)
+        : null;
+    }
+
+    await prisma.$transaction(async (tx) => {
+      if (Object.keys(usuarioData).length > 0) {
+        await tx.usuario.update({
+          where: { idUsuario: docenteActual.usuarioId },
+          data: usuarioData,
+        });
+      }
+
+      if (Object.keys(docenteData).length > 0) {
+        await tx.docente.update({
+          where: { idDocente: docenteId },
+          data: docenteData,
+        });
+      }
+    });
+
+    res.json({ ok: true, mensaje: "Docente actualizado correctamente" });
+  } catch (error) {
+    console.error("Error al actualizar docente:", error);
+
+    if (error.code === "P2002") {
+      return res.status(400).json({
+        ok: false,
+        error:
+          "La CURP, Email o Número de Empleado ya están en uso por otro registro.",
+      });
+    }
+
+    res.status(500).json({
+      ok: false,
+      error: "Error interno al intentar actualizar al docente",
+    });
+  }
+};
+module.exports = {
+  crearDocente,
+  getDocentes,
+  cargarDocentesMasivos,
+  eliminarDocente,
+  actualizarDocente,
+};

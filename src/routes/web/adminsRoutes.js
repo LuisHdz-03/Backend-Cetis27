@@ -9,6 +9,7 @@ const {
   getAdministrativos,
   cargarAdministrativosMasivos,
   asignarMateria,
+  eliminarAdministrativo,
 } = require("../../controller/web/administrativoController");
 
 router.post("/", crearAdministrativo);
@@ -19,5 +20,5 @@ router.post(
   upload.single("archivosExcel"),
   cargarAdministrativosMasivos,
 );
-
+router.delete("/:id", eliminarAdministrativo);
 module.exports = router;

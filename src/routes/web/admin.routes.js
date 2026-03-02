@@ -10,7 +10,7 @@ router.get("/", (req, res) => {
 // Autenticación
 router.use("/auth", require("./authRouter"));
 
-router.use(verificarToken);
+//router.use(verificarToken);
 
 // Gestión Académica
 router.use("/estudiantes", require("./estudiantesRoute"));

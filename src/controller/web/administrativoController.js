@@ -259,9 +259,65 @@ const asignarMateria = async (req, res) => {
   }
 };
 
+const eliminarAdministrativo = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const adminId = parseInt(id);
+
+    if (isNaN(adminId)) {
+      return res
+        .status(400)
+        .json({ ok: false, error: "ID de administrador inválido" });
+    }
+
+    // 1. Buscamos al administrador para saber cuál es su usuarioId
+    const admin = await prisma.administrativo.findUnique({
+      where: { idAdministrativo: adminId },
+    });
+
+    if (!admin) {
+      return res
+        .status(404)
+        .json({ ok: false, error: "Administrador no encontrado" });
+    }
+
+    // 2. Eliminamos en cascada (Administrativo y luego Usuario) usando una transacción
+    await prisma.$transaction(async (tx) => {
+      // Primero borramos el registro hijo (administrativo)
+      await tx.administrativo.delete({
+        where: { idAdministrativo: adminId },
+      });
+
+      // Luego borramos el registro padre (usuario)
+      await tx.usuario.delete({
+        where: { idUsuario: admin.usuarioId },
+      });
+    });
+
+    res.json({ ok: true, mensaje: "Administrador eliminado correctamente" });
+  } catch (error) {
+    console.error("Error al eliminar administrador:", error);
+
+    // Código P2003: Falla de llave foránea
+    if (error.code === "P2003") {
+      return res.status(400).json({
+        ok: false,
+        error:
+          "No se puede eliminar porque este administrador tiene dependencias asignadas.",
+      });
+    }
+
+    res.status(500).json({
+      ok: false,
+      error: "Error interno al intentar eliminar al administrador",
+    });
+  }
+};
+
 module.exports = {
   crearAdministrativo,
   getAdministrativos,
   cargarAdministrativosMasivos,
   asignarMateria,
+  eliminarAdministrativo,
 };

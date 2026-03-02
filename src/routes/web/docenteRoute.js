@@ -8,10 +8,14 @@ const {
   crearDocente,
   getDocentes,
   cargarDocentesMasivos,
+  eliminarDocente,
+  actualizarDocente,
 } = require("../../controller/web/docenteController");
 
 router.post("/", crearDocente);
 router.get("/", getDocentes);
 router.post("/masivo", upload.single("archivosExcel"), cargarDocentesMasivos);
+router.delete("/:id", eliminarDocente);
+router.put("/:id", actualizarDocente);
 
 module.exports = router;
