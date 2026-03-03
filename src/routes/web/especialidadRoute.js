@@ -16,5 +16,9 @@ router.post("/", crearEspecialidad);
 router.get("/", getEspecialidad);
 router.put("/:id", actualizarEspecialidad);
 router.delete("/:id", eliminarEspecialidad);
-router.post("/masivo", upload.single("file"), cargarEspecialidadesMasivas);
+router.post(
+  "/masivo",
+  upload.single("archivoExcel"),
+  cargarEspecialidadesMasivas,
+);
 module.exports = router;

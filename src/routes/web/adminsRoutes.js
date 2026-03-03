@@ -17,8 +17,8 @@ router.post("/", crearAdministrativo);
 router.get("/", getAdministrativos);
 router.post("/asignar-materia", asignarMateria);
 router.post(
-  "/masivos",
-  upload.single("archivosExcel"),
+  "/masivo",
+  upload.single("archivoExcel"),
   cargarAdministrativosMasivos,
 );
 router.put("/:id", actualizarAdministrativo);

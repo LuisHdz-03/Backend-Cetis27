@@ -14,7 +14,7 @@ const {
 
 router.post("/", crearDocente);
 router.get("/", getDocentes);
-router.post("/masivo", upload.single("archivosExcel"), cargarDocentesMasivos);
+router.post("/masivo", upload.single("archivoExcel"), cargarDocentesMasivos);
 router.delete("/:id", eliminarDocente);
 router.put("/:id", actualizarDocente);
 

@@ -18,6 +18,6 @@ router.get("/", getGrupos);
 router.get("/:id", getGrupoById);
 router.put("/:id", actualizarGrupo);
 router.delete("/:id", eliminarGrupo);
-router.post("/masivo", upload.single("file"), cargarGruposMasivos);
+router.post("/masivo", upload.single("archivoExcel"), cargarGruposMasivos);
 
 module.exports = router;

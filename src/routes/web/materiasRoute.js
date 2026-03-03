@@ -16,6 +16,6 @@ router.post("/", crearMateria);
 router.get("/", getMateria);
 router.put("/:id", actualizarMateria);
 router.delete("/:id", eliminarMateria);
-router.post("/masivo", upload.single("archivosExcel"), cargarMateriasMasivas);
+router.post("/masivo", upload.single("archivoExcel"), cargarMateriasMasivas);
 
 module.exports = router;
