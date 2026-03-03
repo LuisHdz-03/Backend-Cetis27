@@ -26,6 +26,17 @@ const extraerFechaDesdeCURP = (curp) => {
   }
 };
 
+// Cargos permitidos para personal administrativo
+const cargosPermitidos = [
+  "DIRECTOR",
+  "SUBDIRECTORA ACADEMICA",
+  "COORDINADOR",
+  "JEFE DE DEPARTAMENTO",
+  "SECRETARIO",
+  "TESORERO",
+  "PREFECTO",
+];
+
 // controladores
 
 const crearAdministrativo = async (req, res) => {
@@ -49,6 +60,14 @@ const crearAdministrativo = async (req, res) => {
     if (!rolesPermitidos.includes(rolAsignar)) {
       return res.status(400).json({
         error: `El rol '${rolAsignar}' no es válido. Usa: ${rolesPermitidos.join(", ")}`,
+      });
+    }
+
+    // Validar cargo permitido
+    const cargoNormalizado = cargo.trim().toUpperCase();
+    if (!cargosPermitidos.includes(cargoNormalizado)) {
+      return res.status(400).json({
+        error: `El cargo '${cargo}' no es válido. Cargos permitidos: ${cargosPermitidos.join(", ")}`,
       });
     }
 
@@ -81,7 +100,7 @@ const crearAdministrativo = async (req, res) => {
       const perfil = await tx.administrativo.create({
         data: {
           numeroEmpleado: numEmpleadoLimpio,
-          cargo,
+          cargo: cargoNormalizado,
           area,
           usuarioId: usuario.idUsuario,
         },
@@ -178,6 +197,16 @@ const cargarAdministrativosMasivos = async (req, res) => {
         continue;
       }
 
+      // Validar cargo permitido
+      const cargoNormalizado = String(cargoExcel).trim().toUpperCase();
+      if (!cargosPermitidos.includes(cargoNormalizado)) {
+        errores.push({
+          numeroEmpleado: numEmpleadoExcel,
+          error: `Cargo inválido: '${cargoExcel}'. Cargos permitidos: ${cargosPermitidos.join(", ")}`,
+        });
+        continue;
+      }
+
       try {
         const numEmpleadoLimpio = limpiarMatricula(numEmpleadoExcel);
         const fechaNac = extraerFechaDesdeCURP(curpExcel);
@@ -207,7 +236,7 @@ const cargarAdministrativosMasivos = async (req, res) => {
           await tx.administrativo.create({
             data: {
               numeroEmpleado: numEmpleadoLimpio,
-              cargo: cargoExcel,
+              cargo: cargoNormalizado,
               area: areaExcel,
               usuarioId: nuevoUsuario.idUsuario,
             },
@@ -258,6 +287,106 @@ const asignarMateria = async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ ok: false, msg: "Error al realizar la asignación" });
+  }
+};
+
+const actualizarAdministrativo = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      nombre,
+      apellidoPaterno,
+      apellidoMaterno,
+      curp,
+      cargo,
+      area,
+      numeroEmpleado,
+      telefono,
+      activo,
+    } = req.body;
+
+    const adminId = parseInt(id);
+
+    if (isNaN(adminId)) {
+      return res
+        .status(400)
+        .json({ ok: false, error: "ID de administrador inválido" });
+    }
+
+    // Buscar el administrativo para obtener el usuarioId
+    const admin = await prisma.administrativo.findUnique({
+      where: { idAdministrativo: adminId },
+      include: { usuario: true },
+    });
+
+    if (!admin) {
+      return res
+        .status(404)
+        .json({ ok: false, error: "Administrador no encontrado" });
+    }
+
+    // Validar cargo si se proporciona
+    if (cargo) {
+      const cargoNormalizado = cargo.trim().toUpperCase();
+      if (!cargosPermitidos.includes(cargoNormalizado)) {
+        return res.status(400).json({
+          error: `El cargo '${cargo}' no es válido. Cargos permitidos: ${cargosPermitidos.join(", ")}`,
+        });
+      }
+    }
+
+    // Actualizar en transacción
+    const actualizado = await prisma.$transaction(async (tx) => {
+      // Actualizar usuario si hay cambios
+      const usuarioData = {};
+      if (nombre !== undefined) usuarioData.nombre = nombre;
+      if (apellidoPaterno !== undefined)
+        usuarioData.apellidoPaterno = apellidoPaterno;
+      if (apellidoMaterno !== undefined)
+        usuarioData.apellidoMaterno = apellidoMaterno;
+      if (curp !== undefined) usuarioData.curp = curp.trim().toUpperCase();
+      if (telefono !== undefined) usuarioData.telefono = telefono;
+      if (activo !== undefined) usuarioData.activo = activo;
+
+      const usuarioActualizado = await tx.usuario.update({
+        where: { idUsuario: admin.usuarioId },
+        data: usuarioData,
+      });
+
+      // Actualizar administrativo si hay cambios
+      const adminData = {};
+      if (cargo !== undefined) adminData.cargo = cargo.trim().toUpperCase();
+      if (area !== undefined) adminData.area = area;
+      if (numeroEmpleado !== undefined)
+        adminData.numeroEmpleado = limpiarMatricula(numeroEmpleado);
+
+      const adminActualizado = await tx.administrativo.update({
+        where: { idAdministrativo: adminId },
+        data: adminData,
+      });
+
+      return { usuario: usuarioActualizado, administrativo: adminActualizado };
+    });
+
+    res.json({
+      ok: true,
+      mensaje: "Administrador actualizado correctamente",
+      data: actualizado,
+    });
+  } catch (error) {
+    console.error("Error al actualizar administrador:", error);
+
+    if (error.code === "P2002") {
+      return res.status(400).json({
+        ok: false,
+        error: "La CURP o Email ya está en uso por otro usuario",
+      });
+    }
+
+    res.status(500).json({
+      ok: false,
+      error: "Error interno al intentar actualizar al administrador",
+    });
   }
 };
 
@@ -321,5 +450,6 @@ module.exports = {
   getAdministrativos,
   cargarAdministrativosMasivos,
   asignarMateria,
+  actualizarAdministrativo,
   eliminarAdministrativo,
 };

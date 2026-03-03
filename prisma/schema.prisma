@@ -41,9 +41,13 @@ model Docente{
   idDocente Int @id @default(autoincrement())
   numeroEmpleado String?
 
+  especialidadId Int?
+  especialidad Especialidad? @relation(fields: [especialidadId], references: [idEspecialidad])
+  
   usuarioId Int @unique
   usuario Usuario @relation(fields: [usuarioId], references: [idUsuario])
   clases Clase[]
+  
   reportesHechos Reporte[] @relation("ReportadoPor")
 
   @@map("docentes")
@@ -103,6 +107,7 @@ model Especialidad {
   
   grupos         Grupo[]
   materias       Materia[] 
+  docentes       Docente[]
 
   @@map("especialidades")
 }

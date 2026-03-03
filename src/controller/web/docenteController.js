@@ -41,6 +41,7 @@ const crearDocente = async (req, res) => {
       password,
       telefono,
       direccion,
+      idEspecialidad,
     } = req.body;
 
     const numEmpleadoLimpio = limpiarMatricula(numeroEmpleado);
@@ -63,7 +64,6 @@ const crearDocente = async (req, res) => {
           password: hashedPassword,
           telefono,
           direccion,
-          idEspecialidad,
           rol: "DOCENTE",
           activo: true,
         },
@@ -97,6 +97,7 @@ const crearDocente = async (req, res) => {
         error: "La CURP, Email o Número de Empleado ya existe",
       });
     }
+    console.error(error);
     res.status(500).json({ ok: false, error: "Error al registrar docente" });
   }
 };
@@ -116,7 +117,7 @@ const getDocentes = async (req, res) => {
       },
     });
 
-    // Transformamos los datos para que el Frontend los reciba "aplanados"
+    // Transformamos los datos para que el Frontend los reciba aplanados
     const dataFormateada = docentes.map((d) => ({
       id: d.idDocente,
       nombre: d.usuario?.nombre,
@@ -126,7 +127,8 @@ const getDocentes = async (req, res) => {
       curp: d.usuario?.curp || "N/A",
       telefono: d.usuario?.telefono || "N/A",
       numeroEmpleado: d.numeroEmpleado || "N/A",
-      especialidad: d.clases[0]?.materias?.nombre || "General",
+      especialidad: d.especialidad?.nombre || "Sin Asignar",
+
       activo: d.usuario?.activo ?? true,
     }));
 

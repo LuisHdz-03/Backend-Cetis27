@@ -3,25 +3,37 @@ const prisma = new PrismaClient();
 
 const crearClase = async (req, res) => {
   try {
-    const { grupoId, materiaId, docenteId, horario } = req.body;
+    const { grupoId, materiaId, docenteId, periodoId, horario } = req.body;
 
-    if (!grupoId || !materiaId || !docenteId) {
-      return res.status(400).json({ error: "Faltan datos" });
+    if (!grupoId || !materiaId || !docenteId || !periodoId) {
+      return res
+        .status(400)
+        .json({ error: "Faltan datos obligatorios para asignar la clase" });
     }
 
     const nuevaClase = await prisma.clase.create({
       data: {
-        grupoId: parseInt(grupoId),
-        materiaId: parseInt(materiaId),
-        docenteId: parseInt(docenteId),
-        horario: horario,
+        horario: horario || null,
+        grupo: {
+          connect: { idGrupo: parseInt(grupoId) },
+        },
+        materias: {
+          connect: { idMateria: parseInt(materiaId) },
+        },
+        docente: {
+          connect: { idDocente: parseInt(docenteId) },
+        },
+        periodo: {
+          connect: { idPeriodo: parseInt(periodoId) },
+        },
       },
     });
+
     res
       .status(201)
-      .json({ mensaje: "Clase creada con exito", clase: nuevaClase });
+      .json({ mensaje: "Clase creada con éxito", clase: nuevaClase });
   } catch (error) {
-    console.error(error);
+    console.error("Error crítico al crear la clase:", error);
     res.status(500).json({ error: "Error al crear la clase" });
   }
 };
@@ -53,10 +65,12 @@ const getClase = async (req, res) => {
             },
           },
         },
+        periodo: true,
       },
     });
     res.json(clase);
   } catch (error) {
+    console.error("Error al traer clases:", error);
     res.status(500).json({ error: "No se pudieron traer las clases" });
   }
 };
@@ -69,10 +83,12 @@ const getClaseByDocente = async (req, res) => {
       include: {
         grupo: true,
         materias: true,
+        periodo: true,
       },
     });
     res.json(clases);
   } catch (error) {
+    console.error("Error al obtener carga académica:", error);
     res.status(500).json({ error: "No se pudo obtener la carga academica" });
   }
 };
