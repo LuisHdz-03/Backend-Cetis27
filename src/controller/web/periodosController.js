@@ -60,4 +60,65 @@ const setPeriodoActual = async (req, res) => {
   }
 };
 
-module.exports = { crearPeriodo, getPeriodos, setPeriodoActual };
+const avanzarSemestre = async (req, res) => {
+  try {
+    await prisma.$transaction(async (tx) => {
+      //buscamos al alumno y lo subimos de semestre y si egreso lo desactivamos.
+      const estudiantes = await tx.estudiante.findMany();
+
+      for (const alum of estudiantes) {
+        if (alum.semestre >= 6) {
+          await tx.estudiante.update({
+            where: { idEstudiante: alum.idEstudiante },
+            data: { activo: false, semestre: 7 },
+          });
+        } else {
+          await tx.estudiante.update({
+            where: { idEstudiante: alum.idEstudiante },
+            data: { data: alum.semestre + 1 },
+          });
+        }
+      }
+
+      //buscamos los grupos y los subimos de mesestre.
+
+      const grupos = await tx.grupo.findMany();
+
+      for (const grupo of grupos) {
+        if (grupo.grado >= 6) {
+          await tx.grupo.delete({
+            where: { idGrupo: grupo.idGrupo },
+          });
+        } else {
+          const nuevoGrado = grupo.grado + 1;
+          const nuevoNombre = grupo.nombre.replace(/^\d+/, nuevoGrado);
+
+          await tx.grupo.update({
+            where: { idGrupo: grupo.idGrupo },
+            data: {
+              grado: nuevoGrado,
+              nombre: nuevoNombre,
+            },
+          });
+        }
+      }
+    });
+
+    res.status(200).json({
+      ok: true,
+      msg: "Cierre de semestre exitoso!!",
+    });
+  } catch (error) {
+    console.error("Error crítico en el cierre de semestre:", error);
+    res
+      .status(500)
+      .json({ error: "Error al procesar la transición de semestre." });
+  }
+};
+
+module.exports = {
+  crearPeriodo,
+  getPeriodos,
+  setPeriodoActual,
+  avanzarSemestre,
+};
