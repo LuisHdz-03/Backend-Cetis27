@@ -137,6 +137,7 @@ const getAdministrativos = async (req, res) => {
             apellidoMaterno: true,
             email: true,
             curp: true,
+            telefono: true,
             fechaNacimiento: true,
             rol: true,
             activo: true,
@@ -147,7 +148,11 @@ const getAdministrativos = async (req, res) => {
 
     const dataFormateada = admins.map((a) => ({
       id: a.idAdministrativo,
-      nombre: `${a.usuario.nombre} ${a.usuario.apellidoPaterno} ${a.usuario.apellidoMaterno}`,
+      nombre: a.usuario.nombre,
+      apellidoPaterno: a.usuario.apellidoPaterno,
+      apellidoMaterno: a.usuario.apellidoMaterno,
+      telefono: a.usuario.telefono,
+      curp: a.usuario.curp,
       email: a.usuario.email,
       cargo: a.cargo,
       area: a.area,
@@ -219,28 +224,89 @@ const cargarAdministrativosMasivos = async (req, res) => {
         );
 
         await prisma.$transaction(async (tx) => {
-          const nuevoUsuario = await tx.usuario.create({
-            data: {
-              nombre: nombreExcel,
-              apellidoPaterno: fila["PATERNO"] || "",
-              apellidoMaterno: fila["MATERNO"] || "",
-              email: emailGenerado,
-              curp: curpExcel.trim().toUpperCase(),
-              fechaNacimiento: fechaNac,
-              password: hashedPassword,
-              rol: "ADMINISTRATIVO",
-              activo: true,
-            },
+          // Buscar si ya existe un administrativo con ese número de empleado
+          const administrativoExistente = await tx.administrativo.findFirst({
+            where: { numeroEmpleado: numEmpleadoLimpio },
+            include: { usuario: true },
           });
 
-          await tx.administrativo.create({
-            data: {
-              numeroEmpleado: numEmpleadoLimpio,
-              cargo: cargoNormalizado,
-              area: areaExcel,
-              usuarioId: nuevoUsuario.idUsuario,
-            },
-          });
+          if (administrativoExistente) {
+            // Si existe, actualizar solo los campos que sean diferentes
+            const usuarioUpdate = {};
+            if (nombreExcel !== administrativoExistente.usuario.nombre)
+              usuarioUpdate.nombre = nombreExcel;
+            if (
+              (fila["PATERNO"] || "") !==
+              administrativoExistente.usuario.apellidoPaterno
+            )
+              usuarioUpdate.apellidoPaterno = fila["PATERNO"] || "";
+            if (
+              (fila["MATERNO"] || "") !==
+              administrativoExistente.usuario.apellidoMaterno
+            )
+              usuarioUpdate.apellidoMaterno = fila["MATERNO"] || "";
+            if (
+              curpExcel.trim().toUpperCase() !==
+              administrativoExistente.usuario.curp
+            )
+              usuarioUpdate.curp = curpExcel.trim().toUpperCase();
+            if (emailGenerado !== administrativoExistente.usuario.email)
+              usuarioUpdate.email = emailGenerado;
+            if (
+              fechaNac &&
+              fechaNac.getTime() !==
+                administrativoExistente.usuario.fechaNacimiento?.getTime()
+            )
+              usuarioUpdate.fechaNacimiento = fechaNac;
+
+            // Actualizar usuario si hay cambios
+            if (Object.keys(usuarioUpdate).length > 0) {
+              await tx.usuario.update({
+                where: { idUsuario: administrativoExistente.usuarioId },
+                data: usuarioUpdate,
+              });
+            }
+
+            // Actualizar administrativo si hay cambios
+            const adminUpdate = {};
+            if (cargoNormalizado !== administrativoExistente.cargo)
+              adminUpdate.cargo = cargoNormalizado;
+            if (areaExcel !== administrativoExistente.area)
+              adminUpdate.area = areaExcel;
+
+            if (Object.keys(adminUpdate).length > 0) {
+              await tx.administrativo.update({
+                where: {
+                  idAdministrativo: administrativoExistente.idAdministrativo,
+                },
+                data: adminUpdate,
+              });
+            }
+          } else {
+            // Si no existe, crear nuevo
+            const nuevoUsuario = await tx.usuario.create({
+              data: {
+                nombre: nombreExcel,
+                apellidoPaterno: fila["PATERNO"] || "",
+                apellidoMaterno: fila["MATERNO"] || "",
+                email: emailGenerado,
+                curp: curpExcel.trim().toUpperCase(),
+                fechaNacimiento: fechaNac,
+                password: hashedPassword,
+                rol: "ADMINISTRATIVO",
+                activo: true,
+              },
+            });
+
+            await tx.administrativo.create({
+              data: {
+                numeroEmpleado: numEmpleadoLimpio,
+                cargo: cargoNormalizado,
+                area: areaExcel,
+                usuarioId: nuevoUsuario.idUsuario,
+              },
+            });
+          }
         });
 
         datosInsertados.push(numEmpleadoLimpio);

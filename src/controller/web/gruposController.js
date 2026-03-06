@@ -280,18 +280,45 @@ const cargarGruposMasivos = async (req, res) => {
           periodoFinal = periodoExiste.idPeriodo;
         }
 
-        // Crear el grupo con todos los campos
-        const nuevoGrupo = await prisma.grupo.create({
-          data: {
+        // Crear o actualizar el grupo
+        const grupoExistente = await prisma.grupo.findFirst({
+          where: {
             nombre: String(nombre).trim(),
             grado: parseInt(grado),
-            turno: turnoNormalizado,
-            aula: aula ? String(aula).trim() : null,
             especialidadId: especialidadExiste.idEspecialidad,
             periodoId: periodoFinal,
           },
         });
-        datosInsertados.push(nuevoGrupo.nombre);
+
+        if (grupoExistente) {
+          // Si existe, actualizar solo los campos que sean diferentes
+          const grupoUpdate = {};
+          if (turnoNormalizado !== grupoExistente.turno)
+            grupoUpdate.turno = turnoNormalizado;
+          if ((aula ? String(aula).trim() : null) !== grupoExistente.aula)
+            grupoUpdate.aula = aula ? String(aula).trim() : null;
+
+          if (Object.keys(grupoUpdate).length > 0) {
+            await prisma.grupo.update({
+              where: { idGrupo: grupoExistente.idGrupo },
+              data: grupoUpdate,
+            });
+          }
+          datosInsertados.push(nombre);
+        } else {
+          // Si no existe, crear nuevo
+          const nuevoGrupo = await prisma.grupo.create({
+            data: {
+              nombre: String(nombre).trim(),
+              grado: parseInt(grado),
+              turno: turnoNormalizado,
+              aula: aula ? String(aula).trim() : null,
+              especialidadId: especialidadExiste.idEspecialidad,
+              periodoId: periodoFinal,
+            },
+          });
+          datosInsertados.push(nuevoGrupo.nombre);
+        }
       } catch (error) {
         console.error("Error al insertar grupo:", error);
         errores.push({

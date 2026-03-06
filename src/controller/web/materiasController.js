@@ -166,33 +166,6 @@ const cargarMateriasMasivas = async (req, res) => {
       }
 
       try {
-        // Validar si ya existe una materia con ese nombre o código
-        const materiaExiste = await prisma.materia.findFirst({
-          where: {
-            OR: [
-              {
-                nombre: { equals: String(nombre).trim(), mode: "insensitive" },
-              },
-              codigo
-                ? {
-                    codigo: {
-                      equals: String(codigo).trim(),
-                      mode: "insensitive",
-                    },
-                  }
-                : {},
-            ],
-          },
-        });
-
-        if (materiaExiste) {
-          errores.push({
-            registro: nombre,
-            error: `Ya existe una materia con ese nombre o código`,
-          });
-          continue;
-        }
-
         // Si se especifica especialidad, buscarla por nombre
         let especialidadId = null;
         if (especialidadNombre) {
@@ -215,17 +188,51 @@ const cargarMateriasMasivas = async (req, res) => {
           especialidadId = especialidadExiste.idEspecialidad;
         }
 
-        // Crear la materia
-        const nuevaMateria = await prisma.materia.create({
-          data: {
-            nombre: String(nombre).trim(),
-            codigo: codigo ? String(codigo).trim().toUpperCase() : null,
-            horasSemana: horasSemana ? parseInt(horasSemana) : null,
-            semestre: semestre ? parseInt(semestre) : null,
-            especialidadId: especialidadId,
+        // Buscar si ya existe una materia con ese nombre
+        const materiaExiste = await prisma.materia.findFirst({
+          where: {
+            nombre: { equals: String(nombre).trim(), mode: "insensitive" },
           },
         });
-        datosInsertados.push(nuevaMateria.nombre);
+
+        if (materiaExiste) {
+          // Si existe, actualizar solo los campos que sean diferentes
+          const materiaUpdate = {};
+          const codigoNormalizado = codigo
+            ? String(codigo).trim().toUpperCase()
+            : null;
+          const horasInt = horasSemana ? parseInt(horasSemana) : null;
+          const semestreInt = semestre ? parseInt(semestre) : null;
+
+          if (codigoNormalizado !== materiaExiste.codigo)
+            materiaUpdate.codigo = codigoNormalizado;
+          if (horasInt !== materiaExiste.horasSemana)
+            materiaUpdate.horasSemana = horasInt;
+          if (semestreInt !== materiaExiste.semestre)
+            materiaUpdate.semestre = semestreInt;
+          if (especialidadId !== materiaExiste.especialidadId)
+            materiaUpdate.especialidadId = especialidadId;
+
+          if (Object.keys(materiaUpdate).length > 0) {
+            await prisma.materia.update({
+              where: { idMateria: materiaExiste.idMateria },
+              data: materiaUpdate,
+            });
+          }
+          datosInsertados.push(nombre);
+        } else {
+          // Si no existe, crear nueva materia
+          const nuevaMateria = await prisma.materia.create({
+            data: {
+              nombre: String(nombre).trim(),
+              codigo: codigo ? String(codigo).trim().toUpperCase() : null,
+              horasSemana: horasSemana ? parseInt(horasSemana) : null,
+              semestre: semestre ? parseInt(semestre) : null,
+              especialidadId: especialidadId,
+            },
+          });
+          datosInsertados.push(nuevaMateria.nombre);
+        }
       } catch (error) {
         console.error("Error al insertar materia:", error);
         errores.push({

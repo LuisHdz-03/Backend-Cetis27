@@ -113,6 +113,8 @@ const getEstudiantes = async (req, res) => {
             activo: true,
             fechaNacimiento: true,
             curp: true,
+            direccion: true,
+            telefono: true,
           },
         },
         grupo: {
@@ -204,31 +206,90 @@ const cargarDatosMasivos = async (req, res) => {
         const hashedPassword = await bcrypt.hash(matriculaLimpia, salt);
 
         await prisma.$transaction(async (tx) => {
-          const nuevoUsuario = await tx.usuario.create({
-            data: {
-              nombre: nombreExcel,
-              apellidoPaterno: paternoExcel || "",
-              apellidoMaterno: maternoExcel || "",
-              email: emailGenerado,
-              password: hashedPassword,
-              rol: "ALUMNO",
-              activo: true,
-            },
+          // Buscar si ya existe un estudiante con esa matrícula
+          const estudianteExistente = await tx.estudiante.findUnique({
+            where: { matricula: matriculaLimpia },
+            include: { usuario: true },
           });
 
-          await tx.estudiante.create({
-            data: {
-              matricula: matriculaString,
-              curp: curpExcel,
-              semestre: parseInt(semestreExcel) || 1,
-              usuarioId: nuevoUsuario.idUsuario,
+          if (estudianteExistente) {
+            // Si existe, actualizar solo los campos que sean diferentes
+            const usuarioUpdate = {};
+            if (nombreExcel !== estudianteExistente.usuario.nombre)
+              usuarioUpdate.nombre = nombreExcel;
+            if (
+              (paternoExcel || "") !==
+              estudianteExistente.usuario.apellidoPaterno
+            )
+              usuarioUpdate.apellidoPaterno = paternoExcel || "";
+            if (
+              (maternoExcel || "") !==
+              estudianteExistente.usuario.apellidoMaterno
+            )
+              usuarioUpdate.apellidoMaterno = maternoExcel || "";
+            if (
+              curpExcel.trim().toUpperCase() !==
+              estudianteExistente.usuario.curp
+            )
+              usuarioUpdate.curp = curpExcel.trim().toUpperCase();
+            if (emailGenerado !== estudianteExistente.usuario.email)
+              usuarioUpdate.email = emailGenerado;
+            if (
+              fechaNac &&
+              fechaNac.getTime() !==
+                estudianteExistente.usuario.fechaNacimiento?.getTime()
+            )
+              usuarioUpdate.fechaNacimiento = fechaNac;
 
-              grupoId: grupoEncontrado.idGrupo,
+            // Actualizar usuario si hay cambios
+            if (Object.keys(usuarioUpdate).length > 0) {
+              await tx.usuario.update({
+                where: { idUsuario: estudianteExistente.usuarioId },
+                data: usuarioUpdate,
+              });
+            }
 
-              credencialFechaEmision: fechaEmisionAuto,
-              credencialFechaExpiracion: fechaExpiracionAuto,
-            },
-          });
+            // Actualizar estudiante si hay cambios
+            const estudianteUpdate = {};
+            const semestreInt = parseInt(semestreExcel) || 1;
+            if (semestreInt !== estudianteExistente.semestre)
+              estudianteUpdate.semestre = semestreInt;
+            if (grupoEncontrado.idGrupo !== estudianteExistente.grupoId)
+              estudianteUpdate.grupoId = grupoEncontrado.idGrupo;
+
+            if (Object.keys(estudianteUpdate).length > 0) {
+              await tx.estudiante.update({
+                where: { idEstudiante: estudianteExistente.idEstudiante },
+                data: estudianteUpdate,
+              });
+            }
+          } else {
+            // Si no existe, crear nuevo
+            const nuevoUsuario = await tx.usuario.create({
+              data: {
+                nombre: nombreExcel,
+                apellidoPaterno: paternoExcel || "",
+                apellidoMaterno: maternoExcel || "",
+                email: emailGenerado,
+                curp: curpExcel.trim().toUpperCase(),
+                fechaNacimiento: fechaNac,
+                password: hashedPassword,
+                rol: "ALUMNO",
+                activo: true,
+              },
+            });
+
+            await tx.estudiante.create({
+              data: {
+                matricula: matriculaLimpia,
+                semestre: parseInt(semestreExcel) || 1,
+                usuarioId: nuevoUsuario.idUsuario,
+                grupoId: grupoEncontrado.idGrupo,
+                credencialFechaEmision: fechaEmisionAuto,
+                credencialFechaExpiracion: fechaExpiracionAuto,
+              },
+            });
+          }
         });
 
         datosInsertados.push(matriculaExcel);
@@ -293,15 +354,15 @@ const eliminarEstudiante = async (req, res) => {
       return res.status(404).json({ error: "Estudiante no encontrado" });
     }
 
-    await prisma.estudiante.update({
-      where: { idUsuario: estudiante.idEstudiante },
+    await prisma.usuario.update({
+      where: { idUsuario: estudiante.usuarioId },
       data: { activo: false },
     });
 
-    res.json({ mensaje: "Estudiante dado de baja correctamente  " });
+    res.json({ mensaje: "Estudiante dado de baja correctamente" });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: "Erro al dar de baja al estudiante" });
+    res.status(500).json({ error: "Error al dar de baja al estudiante" });
   }
 };
 

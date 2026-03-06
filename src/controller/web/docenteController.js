@@ -185,26 +185,68 @@ const cargarDocentesMasivos = async (req, res) => {
         );
 
         await prisma.$transaction(async (tx) => {
-          const nuevoUsuario = await tx.usuario.create({
-            data: {
-              nombre: nombreExcel,
-              apellidoPaterno: paternoExcel || "",
-              apellidoMaterno: maternoExcel || "",
-              email: emailGenerado,
-              curp: curpExcel.trim().toUpperCase(),
-              fechaNacimiento: fechaNac,
-              password: hashedPassword,
-              rol: "DOCENTE",
-              activo: true,
-            },
+          // Buscar si ya existe un docente con ese número de empleado
+          const docenteExistente = await tx.docente.findFirst({
+            where: { numeroEmpleado: numEmpleadoLimpio },
+            include: { usuario: true },
           });
 
-          await tx.docente.create({
-            data: {
-              numeroEmpleado: numEmpleadoLimpio,
-              usuarioId: nuevoUsuario.idUsuario,
-            },
-          });
+          if (docenteExistente) {
+            // Si existe, actualizar solo los campos que sean diferentes
+            const usuarioUpdate = {};
+            if (nombreExcel !== docenteExistente.usuario.nombre)
+              usuarioUpdate.nombre = nombreExcel;
+            if (
+              (paternoExcel || "") !== docenteExistente.usuario.apellidoPaterno
+            )
+              usuarioUpdate.apellidoPaterno = paternoExcel || "";
+            if (
+              (maternoExcel || "") !== docenteExistente.usuario.apellidoMaterno
+            )
+              usuarioUpdate.apellidoMaterno = maternoExcel || "";
+            if (
+              curpExcel.trim().toUpperCase() !== docenteExistente.usuario.curp
+            )
+              usuarioUpdate.curp = curpExcel.trim().toUpperCase();
+            if (emailGenerado !== docenteExistente.usuario.email)
+              usuarioUpdate.email = emailGenerado;
+            if (
+              fechaNac &&
+              fechaNac.getTime() !==
+                docenteExistente.usuario.fechaNacimiento?.getTime()
+            )
+              usuarioUpdate.fechaNacimiento = fechaNac;
+
+            // Actualizar usuario si hay cambios
+            if (Object.keys(usuarioUpdate).length > 0) {
+              await tx.usuario.update({
+                where: { idUsuario: docenteExistente.usuarioId },
+                data: usuarioUpdate,
+              });
+            }
+          } else {
+            // Si no existe, crear nuevo
+            const nuevoUsuario = await tx.usuario.create({
+              data: {
+                nombre: nombreExcel,
+                apellidoPaterno: paternoExcel || "",
+                apellidoMaterno: maternoExcel || "",
+                email: emailGenerado,
+                curp: curpExcel.trim().toUpperCase(),
+                fechaNacimiento: fechaNac,
+                password: hashedPassword,
+                rol: "DOCENTE",
+                activo: true,
+              },
+            });
+
+            await tx.docente.create({
+              data: {
+                numeroEmpleado: numEmpleadoLimpio,
+                usuarioId: nuevoUsuario.idUsuario,
+              },
+            });
+          }
         });
 
         datosInsertados.push(numEmpleadoLimpio);

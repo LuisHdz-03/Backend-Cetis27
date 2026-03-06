@@ -128,35 +128,38 @@ const cargarEspecialidadesMasivas = async (req, res) => {
       }
 
       try {
-        // Verificar si ya existe una especialidad con ese nombre o código
+        // Buscar si ya existe una especialidad con ese código
         const especialidadExiste = await prisma.especialidad.findFirst({
           where: {
-            OR: [
-              {
-                nombre: { equals: String(nombre).trim(), mode: "insensitive" },
-              },
-              {
-                codigo: { equals: String(codigo).trim(), mode: "insensitive" },
-              },
-            ],
+            codigo: { equals: String(codigo).trim(), mode: "insensitive" },
           },
         });
 
         if (especialidadExiste) {
-          errores.push({
-            registro: nombre,
-            error: `Ya existe una especialidad con ese nombre o código`,
-          });
-          continue;
-        }
+          // Si existe, actualizar solo los campos que sean diferentes
+          const especialidadUpdate = {};
+          const nombreNormalizado = String(nombre).trim().toUpperCase();
 
-        const nuevaEspe = await prisma.especialidad.create({
-          data: {
-            nombre: String(nombre).trim().toUpperCase(),
-            codigo: String(codigo).trim().toUpperCase(),
-          },
-        });
-        datosInsertados.push(nuevaEspe.nombre);
+          if (nombreNormalizado !== especialidadExiste.nombre)
+            especialidadUpdate.nombre = nombreNormalizado;
+
+          if (Object.keys(especialidadUpdate).length > 0) {
+            await prisma.especialidad.update({
+              where: { idEspecialidad: especialidadExiste.idEspecialidad },
+              data: especialidadUpdate,
+            });
+          }
+          datosInsertados.push(nombre);
+        } else {
+          // Si no existe, crear nueva
+          const nuevaEspe = await prisma.especialidad.create({
+            data: {
+              nombre: String(nombre).trim().toUpperCase(),
+              codigo: String(codigo).trim().toUpperCase(),
+            },
+          });
+          datosInsertados.push(nuevaEspe.nombre);
+        }
       } catch (error) {
         console.error("Error al insertar especialidad:", error);
         errores.push({

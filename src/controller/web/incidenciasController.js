@@ -3,31 +3,55 @@ const prisma = new PrismaClient();
 
 const crearReporte = async (req, res) => {
   try {
-    const { titulo, descripcion, tipoIncidencia, nivel, alumnoId, docenteId } =
-      req.body;
+    const {
+      titulo,
+      descripcion,
+      tipo,
+      gravedad,
+      acciones,
+      estudianteId,
+      docenteId,
+      reportadoPor,
+    } = req.body;
 
-    if (!titulo || !descripcion || !alumnoId || !docenteId) {
-      return res.status(400).json({ mensaje: "Faltan datos" });
+    console.log("=== DATOS RECIBIDOS EN EL BACKEND ===", req.body);
+
+    if (!titulo || !descripcion || !estudianteId) {
+      return res.status(400).json({
+        mensaje:
+          "Faltan datos obligatorios (titulo, descripcion o estudianteId)",
+      });
+    }
+
+    const dataReporte = {
+      titulo: titulo,
+      descripcion: descripcion,
+      tipoIncidencia: tipo || "DISCIPLINARIO",
+      nivel: gravedad || "MEDIA",
+      accionesTomadas: acciones || "Pendiente de revisión",
+      estatus: "PENDIENTE",
+      reportadoPor: reportadoPor || "Administración",
+      alumnoId: idEstudianteNumero,
+    };
+
+    // Si hay un docente, también lo conectamos de forma segura
+    if (docenteId) {
+      dataReporte.docente = {
+        connect: { idDocente: parseInt(docenteId) },
+      };
     }
 
     const nuevoReporte = await prisma.reporte.create({
-      data: {
-        titulo,
-        descripcion,
-        tipoIncidencia: tipoIncidencia || "CONDUCTA",
-        nivel: nivel || "LEVE",
-        estatus: "PENDIENTE",
-        alumnoId: parseInt(alumnoId),
-        docenteId: parseInt(docenteId),
-      },
+      data: dataReporte,
     });
 
     res.status(201).json({
-      mensaje: "Reporte generado correctamente",
+      mensaje: "Reporte generado y guardado correctamente",
       reporte: nuevoReporte,
     });
   } catch (error) {
-    res.status(500).json({ error: "error al crear el reporte" });
+    console.error("Error al crear el reporte en la BD:", error);
+    res.status(500).json({ error: "Error interno al crear el reporte" });
   }
 };
 
@@ -50,6 +74,11 @@ const getReporte = async (req, res) => {
                 apellidoMaterno: true,
               },
             },
+            grupo: {
+              include: {
+                especialidad: true, // Necesario para mostrar la especialidad en la tabla
+              },
+            },
           },
         },
         docente: {
@@ -63,20 +92,21 @@ const getReporte = async (req, res) => {
 
     res.json(reportes);
   } catch (error) {
-    res.status(500).json({ error: "Error al obtener los reportes " });
+    console.error("Error en getReporte:", error);
+    res.status(500).json({ error: "Error al obtener los reportes" });
   }
 };
 
 const atenderReporte = async (req, res) => {
-  const { idReporte } = req.params;
-  const { accionesTomadas, estatus } = req.body;
+  const { idReporte } = req.params; // Fíjate que tu Front manda el PUT a /incidencias/:id, asegúrate que las rutas coincidan
+  const { accionesTomadas, estado } = req.body; // El front te mandaba 'estado' en lugar de 'estatus'
 
   try {
     const reporteActualizado = await prisma.reporte.update({
       where: { idReporte: parseInt(idReporte) },
       data: {
-        estatus: estatus || "ATENDIDO",
-        accionesTomadas: accionesTomadas || "Sin comentarios adicionales.",
+        estatus: estado || "RESUELTO", // Usamos el estado que manda el front o "RESUELTO" por defecto
+        ...(accionesTomadas && { accionesTomadas: accionesTomadas }),
       },
     });
 
