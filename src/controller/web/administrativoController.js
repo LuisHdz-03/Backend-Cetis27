@@ -103,6 +103,7 @@ const crearAdministrativo = async (req, res) => {
           cargo: cargoNormalizado,
           area,
           usuarioId: usuario.idUsuario,
+          area: area || "Administración General",
         },
       });
 

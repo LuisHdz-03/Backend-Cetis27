@@ -1,6 +1,7 @@
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 const jwt = require("jsonwebtoken");
+const bcrypt = require("bcryptjs");
 
 const JWT_SECRET = "cetis27_secret_key_2026";
 
@@ -25,7 +26,8 @@ const login = async (req, res) => {
       return res.status(404).json({ error: "Usuario no encontrado." });
     }
 
-    if (usuario.password !== password) {
+    const passwordValida = await bcrypt.compare(password, usuario.password);
+    if (!passwordValida) {
       return res.status(401).json({ error: "Contraseña incorrecta." });
     }
 

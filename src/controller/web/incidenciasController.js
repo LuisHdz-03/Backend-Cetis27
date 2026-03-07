@@ -34,7 +34,6 @@ const crearReporte = async (req, res) => {
       alumnoId: idEstudianteNumero,
     };
 
-    // Si hay un docente, también lo conectamos de forma segura
     if (docenteId) {
       dataReporte.docente = {
         connect: { idDocente: parseInt(docenteId) },
@@ -76,7 +75,7 @@ const getReporte = async (req, res) => {
             },
             grupo: {
               include: {
-                especialidad: true, // Necesario para mostrar la especialidad en la tabla
+                especialidad: true,
               },
             },
           },
@@ -98,14 +97,13 @@ const getReporte = async (req, res) => {
 };
 
 const atenderReporte = async (req, res) => {
-  const { idReporte } = req.params; // Fíjate que tu Front manda el PUT a /incidencias/:id, asegúrate que las rutas coincidan
-  const { accionesTomadas, estado } = req.body; // El front te mandaba 'estado' en lugar de 'estatus'
-
+  const { idReporte } = req.params;
+  const { accionesTomadas, estado } = req.body;
   try {
     const reporteActualizado = await prisma.reporte.update({
       where: { idReporte: parseInt(idReporte) },
       data: {
-        estatus: estado || "RESUELTO", // Usamos el estado que manda el front o "RESUELTO" por defecto
+        estatus: estado || "RESUELTO",
         ...(accionesTomadas && { accionesTomadas: accionesTomadas }),
       },
     });
