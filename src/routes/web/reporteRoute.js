@@ -10,7 +10,7 @@ const {
 
 router.post("/", crearReporte);
 router.get("/", getReporte);
-router.put("/", atenderReporte);
+router.put("/:reporteId", atenderReporte);
 router.get("/alumno/:alumnoId", getHistorialAlumno);
 
 module.exports = router;

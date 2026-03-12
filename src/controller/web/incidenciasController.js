@@ -97,11 +97,12 @@ const getReporte = async (req, res) => {
 };
 
 const atenderReporte = async (req, res) => {
-  const { idReporte } = req.params;
+  const { reporteId } = req.params;
   const { accionesTomadas, estado } = req.body;
+
   try {
     const reporteActualizado = await prisma.reporte.update({
-      where: { idReporte: parseInt(idReporte) },
+      where: { idReporte: parseInt(reporteId) },
       data: {
         estatus: estado || "RESUELTO",
         ...(accionesTomadas && { accionesTomadas: accionesTomadas }),
