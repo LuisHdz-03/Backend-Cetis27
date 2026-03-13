@@ -83,4 +83,42 @@ const login = async (req, res) => {
   }
 };
 
-module.exports = { login };
+const cambiarPassword = async (req, res) => {
+  try {
+    const { idUsuario, passwordActual, passwordNueva } = req.body;
+
+    if (!idUsuario || !passwordActual || !passwordNueva) {
+      return res.status(400).json({ error: "Faltan datos obligatorios" });
+    }
+
+    const usuario = await prisma.usuario.findUnique({
+      where: { idUsuario: parseInt(idUsuario) },
+    });
+
+    if (!usuario) {
+      return res.status(404).json({ error: "Usuario no encontrado" });
+    }
+
+    const isMatch = await bcrypt.compare(passwordActual, usuario.password);
+    if (!isMatch) {
+      return res
+        .status(400)
+        .json({ error: "La contraseña actual es incorrecta" });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(passwordNueva, salt);
+
+    await prisma.usuario.update({
+      where: { idUsuario: parseInt(idUsuario) },
+      data: { password: hashedPassword },
+    });
+
+    res.json({ ok: true, mensaje: "Contraseña actualizada exitosamente" });
+  } catch (error) {
+    console.error("Error al cambiar contraseña:", error);
+    res.status(500).json({ error: "Error interno del servidor" });
+  }
+};
+
+module.exports = { login, cambiarPassword };
