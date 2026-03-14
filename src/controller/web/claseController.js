@@ -77,15 +77,27 @@ const getClase = async (req, res) => {
 
 const getClaseByDocente = async (req, res) => {
   const { idDocente } = req.params;
+
   try {
+    const docente = await prisma.docente.findUnique({
+      where: { usuarioId: parseInt(idDocente) },
+    });
+
+    if (!docente) {
+      return res.status(404).json({
+        error: "No se encontró un perfil de docente para este usuario",
+      });
+    }
+
     const clases = await prisma.clase.findMany({
-      where: { docenteId: parseInt(idDocente) },
+      where: { docenteId: docente.idDocente },
       include: {
         grupo: true,
         materias: true,
         periodo: true,
       },
     });
+
     res.json(clases);
   } catch (error) {
     console.error("Error al obtener carga académica:", error);

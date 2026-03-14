@@ -5,8 +5,8 @@ const registrarAsistencia = async (req, res) => {
   try {
     const { claseId, fecha, listaAlumnos, metodo } = req.body;
 
-    if (!claseId || !listaAlumnos || !listaAlumnos.length === 0) {
-      return res.status(400).json({ mensaje: "Faltan datos " });
+    if (!claseId || !listaAlumnos || listaAlumnos.length === 0) {
+      return res.status(400).json({ mensaje: "Faltan datos válidos" });
     }
 
     const fechaRegistro = fecha ? new Date(fecha) : new Date();
@@ -25,20 +25,42 @@ const registrarAsistencia = async (req, res) => {
           lte: finDia,
         },
       },
+      orderBy: { fecha: "asc" },
     });
 
     if (asistenciaExistente) {
-      return res.status(400).json({
-        mensaje: "Ya se tomo la asistencia del dia de hoy",
-        bloqueado: true,
+      const ahora = new Date();
+      const horaRegistroOriginal = new Date(asistenciaExistente.fecha);
+
+      const diferenciaMs = ahora - horaRegistroOriginal;
+      const diferenciaMinutos = Math.floor(diferenciaMs / 1000 / 60);
+
+      const TIEMPO_GRACIA_MINUTOS = 10;
+
+      if (diferenciaMinutos >= TIEMPO_GRACIA_MINUTOS) {
+        return res.status(400).json({
+          mensaje: `El tiempo para modificar la asistencia ha expirado. Límite: ${TIEMPO_GRACIA_MINUTOS} minutos.`,
+          bloqueado: true,
+        });
+      }
+
+      await prisma.asistencia.deleteMany({
+        where: {
+          claseId: parseInt(claseId),
+          fecha: { gte: inicioDia, lte: finDia },
+        },
       });
     }
+
+    const fechaParaGuardar = asistenciaExistente
+      ? asistenciaExistente.fecha
+      : fechaRegistro;
 
     const datosPaInsertar = listaAlumnos.map((alumno) => ({
       claseId: parseInt(claseId),
       alumnoId: parseInt(alumno.alumnoId),
       estatus: alumno.estatus.toUpperCase(),
-      fecha: fechaRegistro,
+      fecha: fechaParaGuardar,
     }));
 
     const resultado = await prisma.asistencia.createMany({
@@ -47,15 +69,17 @@ const registrarAsistencia = async (req, res) => {
     });
 
     res.status(201).json({
-      mensaje: "Asistencias tomdas",
+      mensaje: asistenciaExistente
+        ? "Asistencia actualizada correctamente"
+        : "Asistencia registrada correctamente",
       totalRegistros: resultado.count,
-      fecha: fechaRegistro.toISOString().split("T")[0],
+      fecha: fechaParaGuardar.toISOString().split("T")[0],
     });
   } catch (error) {
-    res.status(500).json({ mensaje: "Error al tomar las asistencias " });
+    console.error("Error al tomar las asistencias:", error);
+    res.status(500).json({ mensaje: "Error interno al tomar las asistencias" });
   }
 };
-
 const getAsisPorFecha = async (req, res) => {
   try {
     const { claseId, fecha } = req.query;
@@ -135,4 +159,72 @@ const justificarFalta = async (req, res) => {
   }
 };
 
-module.exports = { registrarAsistencia, getAsisPorFecha, justificarFalta };
+const getHistorialAsistencias = async (req, res) => {
+  try {
+    const { claseId, alumnoId, fechaInicio, fechaFin } = req.query;
+
+    let whereClause = {};
+
+    if (claseId) {
+      whereClause.claseId = parseInt(claseId);
+    }
+
+    if (alumnoId) {
+      whereClause.alumnoId = parseInt(alumnoId);
+    }
+
+    if (fechaInicio || fechaFin) {
+      whereClause.fecha = {};
+      if (fechaInicio) {
+        const inicio = new Date(fechaInicio);
+        inicio.setHours(0, 0, 0, 0);
+        whereClause.fecha.gte = inicio;
+      }
+      if (fechaFin) {
+        const fin = new Date(fechaFin);
+        fin.setHours(23, 59, 59, 999);
+        whereClause.fecha.lte = fin;
+      }
+    }
+
+    const historial = await prisma.asistencia.findMany({
+      where: whereClause,
+      include: {
+        alumno: {
+          include: {
+            usuario: {
+              select: {
+                nombre: true,
+                apellidoPaterno: true,
+                apellidoMaterno: true,
+              },
+            },
+          },
+        },
+        clase: {
+          include: {
+            materias: true,
+          },
+        },
+      },
+      orderBy: [
+        { fecha: "desc" },
+        { alumno: { usuario: { apellidoPaterno: "asc" } } },
+      ],
+    });
+
+    res.json(historial);
+  } catch (error) {
+    console.error("Error al obtener el historial de asistencias:", error);
+    res
+      .status(500)
+      .json({ error: "Error al obtener el historial de asistencias." });
+  }
+};
+
+module.exports = {
+  registrarAsistencia,
+  getAsisPorFecha,
+  justificarFalta,
+  getHistorialAsistencias,
+};

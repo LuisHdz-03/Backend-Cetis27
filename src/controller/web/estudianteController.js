@@ -317,23 +317,98 @@ const cargarDatosMasivos = async (req, res) => {
 const actualizarEstudiante = async (req, res) => {
   try {
     const { id } = req.params;
-    const { credencialFechaEmision, credencialFechaExpiracion } = req.body;
+    // 1. Extraemos TODOS los campos que queremos actualizar, incluyendo semestre y grupoId
+    const {
+      credencialFechaEmision,
+      credencialFechaExpiracion,
+      telefono,
+      direccion,
+      semestre,
+      grupoId,
+    } = req.body;
 
-    const dataActualizar = {};
-    if (credencialFechaEmision)
-      dataActualizar.credencialFechaEmision = new Date(credencialFechaEmision);
-    if (credencialFechaExpiracion)
-      dataActualizar.credencialFechaExpiracion = new Date(
-        credencialFechaExpiracion,
-      );
-
-    const estudianteActualizado = await prisma.estudiante.update({
+    // 2. Buscamos al estudiante primero para saber cuál es su 'usuarioId'
+    const estudianteExistente = await prisma.estudiante.findUnique({
       where: { idEstudiante: parseInt(id) },
-      data: dataActualizar,
+    });
+
+    if (!estudianteExistente) {
+      return res.status(404).json({ error: "Estudiante no encontrado" });
+    }
+
+    // 3. Usamos una transacción para actualizar ambas tablas (Estudiante y Usuario) de forma segura
+    const estudianteActualizado = await prisma.$transaction(async (tx) => {
+      // -- A) Actualizar tabla Estudiante --
+      const dataEstudiante = {};
+
+      if (credencialFechaEmision) {
+        dataEstudiante.credencialFechaEmision = new Date(
+          credencialFechaEmision,
+        );
+      }
+      if (credencialFechaExpiracion) {
+        dataEstudiante.credencialFechaExpiracion = new Date(
+          credencialFechaExpiracion,
+        );
+      }
+      if (semestre !== undefined) {
+        dataEstudiante.semestre = parseInt(semestre);
+      }
+      if (grupoId !== undefined) {
+        // Si grupoId es null (ej. dar de baja de un grupo), lo permitimos, sino lo parseamos
+        dataEstudiante.grupoId = grupoId === null ? null : parseInt(grupoId);
+      }
+
+      if (Object.keys(dataEstudiante).length > 0) {
+        await tx.estudiante.update({
+          where: { idEstudiante: parseInt(id) },
+          data: dataEstudiante,
+        });
+      }
+
+      // -- B) Actualizar tabla Usuario (teléfono y dirección) --
+      const dataUsuario = {};
+      if (telefono !== undefined) dataUsuario.telefono = telefono;
+      if (direccion !== undefined) dataUsuario.direccion = direccion;
+
+      if (Object.keys(dataUsuario).length > 0) {
+        await tx.usuario.update({
+          where: { idUsuario: estudianteExistente.usuarioId },
+          data: dataUsuario,
+        });
+      }
+
+      // -- C) Retornar el estudiante con sus relaciones actualizadas INCLUIDAS --
+      return await tx.estudiante.findUnique({
+        where: { idEstudiante: parseInt(id) },
+        include: {
+          usuario: {
+            select: {
+              nombre: true,
+              apellidoPaterno: true,
+              apellidoMaterno: true,
+              email: true,
+              activo: true,
+              fechaNacimiento: true,
+              curp: true,
+              telefono: true,
+              direccion: true,
+            },
+          },
+          grupo: {
+            select: {
+              nombre: true,
+              grado: true,
+              turno: true,
+              especialidad: true,
+            },
+          },
+        },
+      });
     });
 
     res.json({
-      mensaje: "Fechas de credencial actualizadas correctamente",
+      mensaje: "Estudiante actualizado correctamente",
       estudiante: estudianteActualizado,
     });
   } catch (error) {
@@ -366,10 +441,41 @@ const eliminarEstudiante = async (req, res) => {
   }
 };
 
+const getEstudiantesPorGrupo = async (req, res) => {
+  const { grupoId } = req.params;
+
+  try {
+    const alumnos = await prisma.estudiante.findMany({
+      where: { grupoId: parseInt(grupoId) },
+      include: {
+        usuario: {
+          select: {
+            nombre: true,
+            apellidoPaterno: true,
+            apellidoMaterno: true,
+          },
+        },
+      },
+      // Opcional: Ordenarlos alfabéticamente por apellido
+      orderBy: {
+        usuario: {
+          apellidoPaterno: "asc",
+        },
+      },
+    });
+
+    res.json(alumnos);
+  } catch (error) {
+    console.error("Error al obtener alumnos por grupo:", error);
+    res.status(500).json({ error: "Error al obtener la lista de estudiantes" });
+  }
+};
+
 module.exports = {
   crearEstudiante,
   getEstudiantes,
   cargarDatosMasivos,
   actualizarEstudiante,
   eliminarEstudiante,
+  getEstudiantesPorGrupo,
 };

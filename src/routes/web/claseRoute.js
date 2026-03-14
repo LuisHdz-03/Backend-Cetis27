@@ -9,6 +9,6 @@ const {
 
 router.post("/", crearClase);
 router.get("/", getClase);
-router.get("/", getClaseByDocente);
+router.get("/docente/:idDocente", getClaseByDocente);
 
 module.exports = router;
