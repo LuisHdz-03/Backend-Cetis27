@@ -11,7 +11,7 @@ const limpiarMatricula = (valor) => {
   return numStr.trim();
 };
 
-// se calcula la fecha de naciento con la curp
+//funcion para calcular fecha nacimiento desde la curp
 const extraerFechaDesdeCURP = (curp) => {
   if (!curp || curp.length < 10) return null;
   try {
@@ -205,14 +205,12 @@ const cargarDatosMasivos = async (req, res) => {
         const hashedPassword = await bcrypt.hash(matriculaLimpia, salt);
 
         await prisma.$transaction(async (tx) => {
-          // Buscar si ya existe un estudiante con esa matrícula
           const estudianteExistente = await tx.estudiante.findUnique({
             where: { matricula: matriculaLimpia },
             include: { usuario: true },
           });
 
           if (estudianteExistente) {
-            // Si existe, actualizar solo los campos que sean diferentes
             const usuarioUpdate = {};
             if (nombreExcel !== estudianteExistente.usuario.nombre)
               usuarioUpdate.nombre = nombreExcel;
@@ -240,7 +238,6 @@ const cargarDatosMasivos = async (req, res) => {
             )
               usuarioUpdate.fechaNacimiento = fechaNac;
 
-            // Actualizar usuario si hay cambios
             if (Object.keys(usuarioUpdate).length > 0) {
               await tx.usuario.update({
                 where: { idUsuario: estudianteExistente.usuarioId },
@@ -248,7 +245,6 @@ const cargarDatosMasivos = async (req, res) => {
               });
             }
 
-            // Actualizar estudiante si hay cambios
             const estudianteUpdate = {};
             const semestreInt = parseInt(semestreExcel) || 1;
             if (semestreInt !== estudianteExistente.semestre)
@@ -263,7 +259,6 @@ const cargarDatosMasivos = async (req, res) => {
               });
             }
           } else {
-            // Si no existe, crear nuevo
             const nuevoUsuario = await tx.usuario.create({
               data: {
                 nombre: nombreExcel,
@@ -316,7 +311,6 @@ const cargarDatosMasivos = async (req, res) => {
 const actualizarEstudiante = async (req, res) => {
   try {
     const { id } = req.params;
-    // 1. Extraemos TODOS los campos que queremos actualizar, incluyendo semestre y grupoId
     const {
       credencialFechaEmision,
       credencialFechaExpiracion,
@@ -324,20 +318,21 @@ const actualizarEstudiante = async (req, res) => {
       direccion,
       semestre,
       grupoId,
+      nombreTutor,
+      nombrePapaMamaTutor,
+      tutor,
     } = req.body;
 
-    // 2. Buscamos al estudiante primero para saber cuál es su 'usuarioId'
     const estudianteExistente = await prisma.estudiante.findUnique({
       where: { idEstudiante: parseInt(id) },
+      include: { tutor: true },
     });
 
     if (!estudianteExistente) {
       return res.status(404).json({ error: "Estudiante no encontrado" });
     }
 
-    // 3. Usamos una transacción para actualizar ambas tablas (Estudiante y Usuario) de forma segura
     const estudianteActualizado = await prisma.$transaction(async (tx) => {
-      // -- A) Actualizar tabla Estudiante --
       const dataEstudiante = {};
 
       if (credencialFechaEmision) {
@@ -354,8 +349,14 @@ const actualizarEstudiante = async (req, res) => {
         dataEstudiante.semestre = parseInt(semestre);
       }
       if (grupoId !== undefined) {
-        // Si grupoId es null (ej. dar de baja de un grupo), lo permitimos, sino lo parseamos
         dataEstudiante.grupoId = grupoId === null ? null : parseInt(grupoId);
+      }
+
+      if (nombreTutor !== undefined) {
+        dataEstudiante.nombreTutor = nombreTutor;
+      }
+      if (nombrePapaMamaTutor !== undefined) {
+        dataEstudiante.nombrePapaMamaTutor = nombrePapaMamaTutor;
       }
 
       if (Object.keys(dataEstudiante).length > 0) {
@@ -365,7 +366,6 @@ const actualizarEstudiante = async (req, res) => {
         });
       }
 
-      // -- B) Actualizar tabla Usuario (teléfono y dirección) --
       const dataUsuario = {};
       if (telefono !== undefined) dataUsuario.telefono = telefono;
       if (direccion !== undefined) dataUsuario.direccion = direccion;
@@ -377,7 +377,29 @@ const actualizarEstudiante = async (req, res) => {
         });
       }
 
-      // -- C) Retornar el estudiante con sus relaciones actualizadas INCLUIDAS --
+      if (tutor && estudianteExistente.tutorId) {
+        const dataTutor = {};
+
+        if (tutor.nombre !== undefined) dataTutor.nombre = tutor.nombre;
+        if (tutor.apellidoPaterno !== undefined)
+          dataTutor.apellidoPaterno = tutor.apellidoPaterno;
+        if (tutor.apellidoMaterno !== undefined)
+          dataTutor.apellidoMaterno = tutor.apellidoMaterno;
+        if (tutor.telefono !== undefined) dataTutor.telefono = tutor.telefono;
+        if (tutor.email !== undefined) dataTutor.email = tutor.email;
+        if (tutor.parentesco !== undefined)
+          dataTutor.parentesco = tutor.parentesco;
+        if (tutor.direccion !== undefined)
+          dataTutor.direccion = tutor.direccion;
+
+        if (Object.keys(dataTutor).length > 0) {
+          await tx.tutor.update({
+            where: { idTutor: estudianteExistente.tutorId },
+            data: dataTutor,
+          });
+        }
+      }
+
       return await tx.estudiante.findUnique({
         where: { idEstudiante: parseInt(id) },
         include: {
@@ -400,6 +422,17 @@ const actualizarEstudiante = async (req, res) => {
               grado: true,
               turno: true,
               especialidad: true,
+            },
+          },
+          tutor: {
+            select: {
+              nombre: true,
+              apellidoPaterno: true,
+              apellidoMaterno: true,
+              telefono: true,
+              email: true,
+              parentesco: true,
+              direccion: true,
             },
           },
         },
@@ -455,7 +488,6 @@ const getEstudiantesPorGrupo = async (req, res) => {
           },
         },
       },
-      // Opcional: Ordenarlos alfabéticamente por apellido
       orderBy: {
         usuario: {
           apellidoPaterno: "asc",
