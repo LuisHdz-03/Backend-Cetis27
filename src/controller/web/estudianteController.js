@@ -124,6 +124,7 @@ const getEstudiantes = async (req, res) => {
             especialidad: true,
           },
         },
+        tutor: true,
       },
     });
 
@@ -318,8 +319,6 @@ const actualizarEstudiante = async (req, res) => {
       direccion,
       semestre,
       grupoId,
-      nombreTutor,
-      nombrePapaMamaTutor,
       tutor,
     } = req.body;
 
@@ -333,8 +332,44 @@ const actualizarEstudiante = async (req, res) => {
     }
 
     const estudianteActualizado = await prisma.$transaction(async (tx) => {
-      const dataEstudiante = {};
+      let idTutorAsignado = estudianteExistente.tutorId;
 
+      // 1. LÓGICA DEL TUTOR (SI ENVIARON DATOS)
+      if (tutor && tutor.nombre) {
+        // Validamos que al menos venga el nombre
+        if (estudianteExistente.tutorId) {
+          // Si ya existe, lo actualizamos
+          await tx.tutor.update({
+            where: { idTutor: estudianteExistente.tutorId },
+            data: {
+              nombre: tutor.nombre,
+              apellidoPaterno: tutor.apellidoPaterno || "",
+              apellidoMaterno: tutor.apellidoMaterno || "",
+              telefono: tutor.telefono || "",
+              email: tutor.email || null,
+              parentesco: tutor.parentesco || "Tutor",
+              direccion: tutor.direccion || "",
+            },
+          });
+        } else {
+          // Si NO existe, creamos uno nuevo y lo relacionamos
+          const nuevoTutor = await tx.tutor.create({
+            data: {
+              nombre: tutor.nombre,
+              apellidoPaterno: tutor.apellidoPaterno || "",
+              apellidoMaterno: tutor.apellidoMaterno || "",
+              telefono: tutor.telefono || "",
+              email: tutor.email || null,
+              parentesco: tutor.parentesco || "Tutor",
+              direccion: tutor.direccion || "",
+            },
+          });
+          idTutorAsignado = nuevoTutor.idTutor;
+        }
+      }
+
+      // 2. LÓGICA DEL ESTUDIANTE
+      const dataEstudiante = {};
       if (credencialFechaEmision) {
         dataEstudiante.credencialFechaEmision = new Date(
           credencialFechaEmision,
@@ -352,11 +387,9 @@ const actualizarEstudiante = async (req, res) => {
         dataEstudiante.grupoId = grupoId === null ? null : parseInt(grupoId);
       }
 
-      if (nombreTutor !== undefined) {
-        dataEstudiante.nombreTutor = nombreTutor;
-      }
-      if (nombrePapaMamaTutor !== undefined) {
-        dataEstudiante.nombrePapaMamaTutor = nombrePapaMamaTutor;
+      // Si creamos un tutor nuevo, lo conectamos
+      if (idTutorAsignado !== estudianteExistente.tutorId) {
+        dataEstudiante.tutorId = idTutorAsignado;
       }
 
       if (Object.keys(dataEstudiante).length > 0) {
@@ -366,6 +399,7 @@ const actualizarEstudiante = async (req, res) => {
         });
       }
 
+      // 3. LÓGICA DEL USUARIO
       const dataUsuario = {};
       if (telefono !== undefined) dataUsuario.telefono = telefono;
       if (direccion !== undefined) dataUsuario.direccion = direccion;
@@ -375,29 +409,6 @@ const actualizarEstudiante = async (req, res) => {
           where: { idUsuario: estudianteExistente.usuarioId },
           data: dataUsuario,
         });
-      }
-
-      if (tutor && estudianteExistente.tutorId) {
-        const dataTutor = {};
-
-        if (tutor.nombre !== undefined) dataTutor.nombre = tutor.nombre;
-        if (tutor.apellidoPaterno !== undefined)
-          dataTutor.apellidoPaterno = tutor.apellidoPaterno;
-        if (tutor.apellidoMaterno !== undefined)
-          dataTutor.apellidoMaterno = tutor.apellidoMaterno;
-        if (tutor.telefono !== undefined) dataTutor.telefono = tutor.telefono;
-        if (tutor.email !== undefined) dataTutor.email = tutor.email;
-        if (tutor.parentesco !== undefined)
-          dataTutor.parentesco = tutor.parentesco;
-        if (tutor.direccion !== undefined)
-          dataTutor.direccion = tutor.direccion;
-
-        if (Object.keys(dataTutor).length > 0) {
-          await tx.tutor.update({
-            where: { idTutor: estudianteExistente.tutorId },
-            data: dataTutor,
-          });
-        }
       }
 
       return await tx.estudiante.findUnique({
