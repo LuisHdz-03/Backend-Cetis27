@@ -1,9 +1,8 @@
-const { PrismaClient } = require("@prisma/client");
+const prisma = require("../../config/prisma");
 const path = require("path");
 const sharp = require("sharp");
 const fs = require("fs");
 const QRCode = require("qrcode");
-const prisma = new PrismaClient();
 
 const getAlumnosMovil = async (req, res) => {
   try {

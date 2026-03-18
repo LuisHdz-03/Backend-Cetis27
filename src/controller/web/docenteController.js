@@ -1,7 +1,6 @@
-const { PrismaClient } = require("@prisma/client");
+const prisma = require("../../config/prisma");
 const bcrypt = require("bcryptjs");
 const XLSX = require("xlsx");
-const prisma = new PrismaClient();
 
 // logica para limpiar la matricula
 const limpiarMatricula = (valor) => {

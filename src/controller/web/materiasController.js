@@ -1,6 +1,5 @@
-const { PrismaClient } = require("@prisma/client");
+const prisma = require("../../config/prisma");
 const XLSX = require("xlsx");
-const prisma = new PrismaClient();
 
 const crearMateria = async (req, res) => {
   try {

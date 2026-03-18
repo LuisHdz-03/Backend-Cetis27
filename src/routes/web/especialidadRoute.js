@@ -4,6 +4,15 @@ const multer = require("multer");
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
+const { verificarToken } = require("../../middlewares/authMiddleware");
+const {
+  bitacoraCrear,
+  bitacoraActualizar,
+  bitacoraEliminar,
+  bitacoraConsultar,
+  bitacoraCargaMasiva,
+} = require("../../middlewares/bitacoraMiddleware");
+
 const {
   crearEspecialidad,
   getEspecialidad,
@@ -12,13 +21,15 @@ const {
   cargarEspecialidadesMasivas,
 } = require("../../controller/web/especialidadController");
 
-router.post("/", crearEspecialidad);
-router.get("/", getEspecialidad);
-router.put("/:id", actualizarEspecialidad);
-router.delete("/:id", eliminarEspecialidad);
+router.post("/", verificarToken, bitacoraCrear, crearEspecialidad);
+router.get("/", verificarToken, bitacoraConsultar, getEspecialidad);
+router.put("/:id", verificarToken, bitacoraActualizar, actualizarEspecialidad);
+router.delete("/:id", verificarToken, bitacoraEliminar, eliminarEspecialidad);
 router.post(
   "/masivo",
+  verificarToken,
   upload.single("archivoExcel"),
+  bitacoraCargaMasiva,
   cargarEspecialidadesMasivas,
 );
 module.exports = router;

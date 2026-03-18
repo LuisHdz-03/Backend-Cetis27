@@ -1,5 +1,4 @@
-const { PrismaClient } = require("@prisma/client");
-const prisma = new PrismaClient();
+const prisma = require("../config/prisma");
 
 /**
  * Middleware para registrar automáticamente acciones en la bitácora
@@ -53,13 +52,10 @@ async function registrarAccionEnBitacora(req, accionBase, responseData) {
       },
     });
   } catch (error) {
-    console.error("Error al guardar en bitácora:", error);
+    console.error("❌ Error al guardar en bitácora:", error);
   }
 }
 
-/**
- * Construir nombre de acción basado en el método HTTP
- */
 function construirAccion(req) {
   const metodo = req.method;
   const ruta = req.route?.path || req.path;
