@@ -42,6 +42,7 @@ model Docente {
 
   especialidadId Int?
   especialidad   Especialidad? @relation(fields: [especialidadId], references: [idEspecialidad])
+   fechaContratacion DateTime?
 
   usuarioId Int     @unique
   usuario   Usuario @relation(fields: [usuarioId], references: [idUsuario])
@@ -100,6 +101,7 @@ model Especialidad {
   idEspecialidad Int    @id @default(autoincrement())
   nombre         String
   codigo         String
+  descripcion String?
 
   grupos   Grupo[]
   materias Materia[]
@@ -154,6 +156,9 @@ model Materia {
   codigo      String?
   horasSemana Int?
   semestre    Int?
+  creditos Int?
+  horasTeoria   Int?  
+  horasPractica Int?
 
   especialidadId Int?
   especialidad   Especialidad? @relation(fields: [especialidadId], references: [idEspecialidad])
@@ -245,10 +250,11 @@ model Administrativo {
   idAdministrativo Int     @id @default(autoincrement())
   numeroEmpleado   String?
   cargo            String
-  area             String
+  area             String?
 
   usuarioId Int     @unique
   usuario   Usuario @relation(fields: [usuarioId], references: [idUsuario])
+   @@map("administrativos")
 }
 
 model TipoEvaluacion {

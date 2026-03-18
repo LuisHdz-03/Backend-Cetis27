@@ -41,6 +41,7 @@ const crearDocente = async (req, res) => {
       telefono,
       direccion,
       idEspecialidad,
+      fechaContratacion,
     } = req.body;
 
     const numEmpleadoLimpio = limpiarMatricula(numeroEmpleado);
@@ -73,6 +74,9 @@ const crearDocente = async (req, res) => {
           numeroEmpleado: numEmpleadoLimpio,
           usuarioId: nuevoUsuario.idUsuario,
           especialidadId: idEspecialidad ? parseInt(idEspecialidad) : null,
+          fechaContratacion: fechaContratacion
+            ? new Date(fechaContratacion)
+            : null,
         },
       });
 
@@ -127,7 +131,7 @@ const getDocentes = async (req, res) => {
       telefono: d.usuario?.telefono || "N/A",
       numeroEmpleado: d.numeroEmpleado || "N/A",
       especialidad: d.especialidad?.nombre || "Sin Asignar",
-
+      fechaContratacion: d.fechaContratacion,
       activo: d.usuario?.activo ?? true,
     }));
 
@@ -351,6 +355,7 @@ const actualizarDocente = async (req, res) => {
       telefono,
       direccion,
       idEspecialidad,
+      fechaContratacion,
     } = req.body;
 
     const usuarioData = {};
@@ -381,6 +386,12 @@ const actualizarDocente = async (req, res) => {
     if (idEspecialidad !== undefined) {
       docenteData.especialidadId = idEspecialidad
         ? parseInt(idEspecialidad)
+        : null;
+    }
+
+    if (fechaContratacion !== undefined) {
+      docenteData.fechaContratacion = fechaContratacion
+        ? new Date(fechaContratacion)
         : null;
     }
 
