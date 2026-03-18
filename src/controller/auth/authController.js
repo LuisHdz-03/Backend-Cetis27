@@ -2,6 +2,10 @@ const prisma = require("../../config/prisma");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 
+const {
+  registrarAccionManual,
+} = require("../../middlewares/bitacoraMiddleware");
+
 const JWT_SECRET = "cetis27_secret_key_2026";
 
 const login = async (req, res) => {
@@ -65,6 +69,15 @@ const login = async (req, res) => {
       { expiresIn: plataforma === "WEB" ? "8h" : "7d" },
     );
 
+    // ==========================================
+    // REGISTRO MANUAL EN BITÁCORA PARA EL LOGIN
+    // ==========================================
+    await registrarAccionManual(
+      usuario.idUsuario,
+      "LOGIN",
+      `Inicio de sesión exitoso desde la plataforma ${plataforma}.`,
+    );
+
     res.json({
       mensaje: `Bienvenido a la plataforma ${plataforma}`,
       token,
@@ -112,6 +125,15 @@ const cambiarPassword = async (req, res) => {
       where: { idUsuario: parseInt(idUsuario) },
       data: { password: hashedPassword },
     });
+
+    // ==========================================
+    // REGISTRO MANUAL EN BITÁCORA
+    // ==========================================
+    await registrarAccionManual(
+      usuario.idUsuario,
+      "ACTUALIZAR CONTRASEÑA",
+      "El usuario actualizó su contraseña por medidas de seguridad.",
+    );
 
     res.json({ ok: true, mensaje: "Contraseña actualizada exitosamente" });
   } catch (error) {

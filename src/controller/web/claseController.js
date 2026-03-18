@@ -104,4 +104,86 @@ const getClaseByDocente = async (req, res) => {
   }
 };
 
-module.exports = { crearClase, getClase, getClaseByDocente };
+const actualizarClase = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { grupoId, materiaId, docenteId, periodoId, horario } = req.body;
+
+    // Verificar que la clase existe
+    const claseExistente = await prisma.clase.findUnique({
+      where: { idClase: parseInt(id) },
+    });
+
+    if (!claseExistente) {
+      return res.status(404).json({ error: "Clase no encontrada" });
+    }
+
+    // Construir objeto de datos a actualizar
+    const dataActualizar = {};
+
+    if (grupoId !== undefined) {
+      dataActualizar.grupoId = parseInt(grupoId);
+    }
+    if (materiaId !== undefined) {
+      dataActualizar.materiaId = parseInt(materiaId);
+    }
+    if (docenteId !== undefined) {
+      dataActualizar.docenteId = parseInt(docenteId);
+    }
+    if (periodoId !== undefined) {
+      dataActualizar.periodoId = parseInt(periodoId);
+    }
+    if (horario !== undefined) {
+      dataActualizar.horario = horario;
+    }
+
+    // Actualizar la clase
+    const claseActualizada = await prisma.clase.update({
+      where: { idClase: parseInt(id) },
+      data: dataActualizar,
+      include: {
+        grupo: {
+          select: {
+            nombre: true,
+            grado: true,
+            turno: true,
+          },
+        },
+        materias: {
+          select: {
+            nombre: true,
+            codigo: true,
+          },
+        },
+        docente: {
+          include: {
+            usuario: {
+              select: {
+                nombre: true,
+                apellidoPaterno: true,
+                apellidoMaterno: true,
+              },
+            },
+          },
+        },
+        periodo: {
+          select: {
+            nombre: true,
+            fechaInicio: true,
+            fechaFin: true,
+          },
+        },
+      },
+    });
+
+    res.json({
+      mensaje: "Clase actualizada correctamente",
+      clase: claseActualizada,
+    });
+  } catch (error) {
+    console.error("Error al actualizar clase:", error);
+    res.status(500).json({ error: "Error al actualizar la clase" });
+  }
+};
+
+module.exports = { crearClase, getClase, getClaseByDocente, actualizarClase };
