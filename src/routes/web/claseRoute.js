@@ -7,8 +7,19 @@ const {
   getClaseByDocente,
 } = require("../../controller/web/claseController");
 
-router.post("/", crearClase);
-router.get("/", getClase);
-router.get("/docente/:idDocente", getClaseByDocente);
+const { verificarToken } = require("../../middlewares/authMiddleware");
+const {
+  bitacoraCrear,
+  bitacoraConsultar,
+} = require("../../middlewares/bitacoraMiddleware");
+
+router.post("/", verificarToken, bitacoraCrear, crearClase);
+router.get("/", verificarToken, bitacoraConsultar, getClase);
+router.get(
+  "/docente/:idDocente",
+  verificarToken,
+  bitacoraConsultar,
+  getClaseByDocente,
+);
 
 module.exports = router;

@@ -8,9 +8,21 @@ const {
   getHistorialAlumno,
 } = require("../../controller/web/incidenciasController");
 
-router.post("/", crearReporte);
-router.get("/", getReporte);
-router.put("/:reporteId", atenderReporte);
-router.get("/alumno/:alumnoId", getHistorialAlumno);
+const { verificarToken } = require("../../middlewares/authMiddleware");
+const {
+  bitacoraCrear,
+  bitacoraConsultar,
+  bitacoraActualizar,
+} = require("../../middlewares/bitacoraMiddleware");
+
+router.post("/", verificarToken, bitacoraCrear, crearReporte);
+router.get("/", verificarToken, bitacoraConsultar, getReporte);
+router.put("/:reporteId", verificarToken, bitacoraActualizar, atenderReporte);
+router.get(
+  "/alumno/:alumnoId",
+  verificarToken,
+  bitacoraConsultar,
+  getHistorialAlumno,
+);
 
 module.exports = router;

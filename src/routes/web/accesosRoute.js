@@ -6,7 +6,13 @@ const {
   getAccesos,
 } = require("../../controller/web/accesosController");
 
-router.post("/", registrarAcceso);
-router.get("/", getAccesos);
+const { verificarToken } = require("../../middlewares/authMiddleware");
+const {
+  bitacoraCrear,
+  bitacoraConsultar,
+} = require("../../middlewares/bitacoraMiddleware");
+
+router.post("/", verificarToken, bitacoraCrear, registrarAcceso);
+router.get("/", verificarToken, bitacoraConsultar, getAccesos);
 
 module.exports = router;

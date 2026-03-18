@@ -60,59 +60,55 @@ const setPeriodoActual = async (req, res) => {
   }
 };
 
-const avanzarSemestre = async (req, res) => {
+const cerrarPeriodoYPromover = async (req, res) => {
+  const { id } = req.params;
+  const idPeriodo = parseInt(id);
+
+  if (isNaN(idPeriodo)) {
+    return res.status(400).json({ error: "ID de periodo inválido" });
+  }
+
   try {
     await prisma.$transaction(async (tx) => {
-      //buscamos al alumno y lo subimos de semestre y si egreso lo desactivamos.
-      const estudiantes = await tx.estudiante.findMany();
+      // 1. Desactivar el periodo actual
+      await tx.periodo.update({
+        where: { idPeriodo: idPeriodo },
+        data: { activo: false },
+      });
 
-      for (const alum of estudiantes) {
-        if (alum.semestre >= 6) {
-          await tx.estudiante.update({
-            where: { idEstudiante: alum.idEstudiante },
-            data: { activo: false, semestre: 7 },
-          });
-        } else {
-          await tx.estudiante.update({
-            where: { idEstudiante: alum.idEstudiante },
-            data: { data: alum.semestre + 1 },
-          });
-        }
+      const estudiantesSexto = await tx.estudiante.findMany({
+        where: { semestre: 6 },
+        select: { usuarioId: true },
+      });
+
+      const idsUsuariosSexto = estudiantesSexto.map((e) => e.usuarioId);
+
+      if (idsUsuariosSexto.length > 0) {
+        await tx.usuario.updateMany({
+          where: { idUsuario: { in: idsUsuariosSexto } },
+          data: { activo: false },
+        });
       }
 
-      //buscamos los grupos y los subimos de mesestre.
-
-      const grupos = await tx.grupo.findMany();
-
-      for (const grupo of grupos) {
-        if (grupo.grado >= 6) {
-          await tx.grupo.delete({
-            where: { idGrupo: grupo.idGrupo },
-          });
-        } else {
-          const nuevoGrado = grupo.grado + 1;
-          const nuevoNombre = grupo.nombre.replace(/^\d+/, nuevoGrado);
-
-          await tx.grupo.update({
-            where: { idGrupo: grupo.idGrupo },
-            data: {
-              grado: nuevoGrado,
-              nombre: nuevoNombre,
-            },
-          });
-        }
-      }
+      await tx.estudiante.updateMany({
+        where: {
+          semestre: { lt: 6 },
+          usuario: { activo: true },
+        },
+        data: {
+          semestre: { increment: 1 },
+          grupoId: null,
+        },
+      });
     });
 
     res.status(200).json({
-      ok: true,
-      msg: "Cierre de semestre exitoso!!",
+      mensaje:
+        "Periodo cerrado correctamente. Estudiantes promovidos y alumnos de 6to semestre egresados.",
     });
   } catch (error) {
-    console.error("Error crítico en el cierre de semestre:", error);
-    res
-      .status(500)
-      .json({ error: "Error al procesar la transición de semestre." });
+    console.error("Error al cerrar periodo:", error);
+    res.status(500).json({ error: "Error interno al cerrar el periodo." });
   }
 };
 
@@ -120,5 +116,5 @@ module.exports = {
   crearPeriodo,
   getPeriodos,
   setPeriodoActual,
-  avanzarSemestre,
+  cerrarPeriodoYPromover,
 };

@@ -4,12 +4,29 @@ const {
   crearPeriodo,
   getPeriodos,
   setPeriodoActual,
-  avanzarSemestre,
+  cerrarPeriodoYPromover,
 } = require("../../controller/web/periodosController");
 
-router.post("/", crearPeriodo);
-router.get("/", getPeriodos);
-router.put("/activar/:idPeriodo", setPeriodoActual);
-router.post("/cierre-semestre", avanzarSemestre);
+const { verificarToken } = require("../../middlewares/authMiddleware");
+const {
+  bitacoraCrear,
+  bitacoraConsultar,
+  bitacoraActualizar,
+} = require("../../middlewares/bitacoraMiddleware");
+
+router.post("/", verificarToken, bitacoraCrear, crearPeriodo);
+router.get("/", verificarToken, bitacoraConsultar, getPeriodos);
+router.put(
+  "/activar/:idPeriodo",
+  verificarToken,
+  bitacoraActualizar,
+  setPeriodoActual,
+);
+router.post(
+  "/:id/cerrar",
+  verificarToken,
+  bitacoraCrear,
+  cerrarPeriodoYPromover,
+);
 
 module.exports = router;

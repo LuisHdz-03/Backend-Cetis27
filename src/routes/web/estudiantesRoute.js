@@ -4,6 +4,15 @@ const multer = require("multer");
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
+const { verificarToken } = require("../../middlewares/authMiddleware");
+const {
+  bitacoraCrear,
+  bitacoraActualizar,
+  bitacoraEliminar,
+  bitacoraConsultar,
+  bitacoraCargaMasiva,
+} = require("../../middlewares/bitacoraMiddleware");
+
 const {
   crearEstudiante,
   getEstudiantes,
@@ -13,11 +22,23 @@ const {
   getEstudiantesPorGrupo,
 } = require("../../controller/web/estudianteController");
 
-router.post("/", crearEstudiante);
-router.get("/", getEstudiantes);
-router.post("/masivo", upload.single("archivoExcel"), cargarDatosMasivos);
-router.put("/:id", actualizarEstudiante);
-router.delete("/:id", eliminarEstudiante);
-router.get("/grupo/:grupoId", getEstudiantesPorGrupo);
+// Aplicar verificarToken y bitácora a todas las rutas
+router.post("/", verificarToken, bitacoraCrear, crearEstudiante);
+router.get("/", verificarToken, bitacoraConsultar, getEstudiantes);
+router.post(
+  "/masivo",
+  verificarToken,
+  upload.single("archivoExcel"),
+  bitacoraCargaMasiva,
+  cargarDatosMasivos,
+);
+router.put("/:id", verificarToken, bitacoraActualizar, actualizarEstudiante);
+router.delete("/:id", verificarToken, bitacoraEliminar, eliminarEstudiante);
+router.get(
+  "/grupo/:grupoId",
+  verificarToken,
+  bitacoraConsultar,
+  getEstudiantesPorGrupo,
+);
 
 module.exports = router;

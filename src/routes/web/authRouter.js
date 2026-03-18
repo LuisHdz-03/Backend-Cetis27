@@ -6,7 +6,18 @@ const {
   cambiarPassword,
 } = require("../../controller/auth/authController");
 
-router.post("/login", login);
-router.put("/cambiar-password", cambiarPassword);
+const { verificarToken } = require("../../middlewares/authMiddleware");
+const {
+  bitacoraLogin,
+  bitacoraActualizar,
+} = require("../../middlewares/bitacoraMiddleware");
+
+router.post("/login", bitacoraLogin, login);
+router.put(
+  "/cambiar-password",
+  verificarToken,
+  bitacoraActualizar,
+  cambiarPassword,
+);
 
 module.exports = router;
