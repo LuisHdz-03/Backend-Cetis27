@@ -282,11 +282,20 @@ const getHistorialAccesos = async (req, res) => {
 const getAsistencias = async (req, res) => {
   try {
     const idUsuario = req.usuario.id;
+
+    // 1. Buscamos al estudiante asociado al usuario del token
     const estudiante = await prisma.estudiante.findUnique({
       where: { usuarioId: idUsuario },
       select: { idEstudiante: true },
     });
 
+    if (!estudiante) {
+      return res
+        .status(404)
+        .json({ error: "Perfil de estudiante no encontrado" });
+    }
+
+    // 2. Consultamos las asistencias usando las relaciones del schema
     const asistencias = await prisma.asistencia.findMany({
       where: { alumnoId: estudiante.idEstudiante },
       include: {
@@ -297,28 +306,84 @@ const getAsistencias = async (req, res) => {
             },
             docente: {
               include: {
-                usuario: { select: { nombre: true, apellidoPaterno: true } },
+                usuario: {
+                  select: { nombre: true, apellidoPaterno: true },
+                },
               },
             },
           },
         },
       },
       orderBy: { fecha: "desc" },
-      take: 50,
+      take: 50, // Limitamos a las últimas 50 para mejor rendimiento
     });
 
+    // 3. Mapeamos al formato que espera la App móvil
     const historialLimpio = asistencias.map((a) => ({
       fecha: a.fecha,
-      estatus: a.estatus,
-      materia: a.clase.materias.nombre,
-      docente: `${a.clase.docente.usuario.nombre} ${a.clase.docente.usuario.apellidoPaterno}`,
+      estatus: a.estatus, // En tu schema se llama 'estatus'
+      materia: a.clase?.materias?.nombre || "Materia no asignada",
+      docente: a.clase?.docente?.usuario
+        ? `${a.clase.docente.usuario.nombre} ${a.clase.docente.usuario.apellidoPaterno}`
+        : "Docente no asignado",
     }));
+
     res.json(historialLimpio);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Error al obtener las asistencias" });
+    console.error("Error detallado en getAsistencias:", error);
+    res.status(500).json({ error: "Error interno al obtener las asistencias" });
   }
 };
+
+const getReportesEstudianteMovil = async (req, res) => {
+  try {
+    const idUsuario = req.usuario.id; // Obtenido del token verificado
+
+    // 1. Buscamos el ID del estudiante asociado al usuario
+    const estudiante = await prisma.estudiante.findUnique({
+      where: { usuarioId: idUsuario },
+      select: { idEstudiante: true },
+    });
+
+    if (!estudiante) {
+      return res.status(404).json({ error: "Estudiante no encontrado" });
+    }
+
+    // 2. Traemos sus reportes con la info del docente que reportó
+    const reportes = await prisma.reporte.findMany({
+      where: { alumnoId: estudiante.idEstudiante },
+      include: {
+        docente: {
+          include: {
+            usuario: { select: { nombre: true, apellidoPaterno: true } },
+          },
+        },
+      },
+      orderBy: { fecha: "desc" },
+    });
+
+    // 3. Limpiamos los datos para que la app móvil los reciba fácil
+    const reportesLimpios = reportes.map((r) => ({
+      id: r.idReporte,
+      titulo: r.titulo,
+      descripcion: r.descripcion,
+      tipo: r.tipoIncidencia,
+      gravedad: r.nivel,
+      estatus: r.estatus,
+      fecha: r.fecha,
+      acciones: r.accionesTomadas,
+      docente: r.docente
+        ? `${r.docente.usuario.nombre} ${r.docente.usuario.apellidoPaterno}`
+        : "Administración",
+    }));
+
+    res.json(reportesLimpios);
+  } catch (error) {
+    console.error("Error al obtener reportes móvil:", error);
+    res.status(500).json({ error: "Error al obtener los reportes" });
+  }
+};
+
 module.exports = {
   getAlumnosMovil,
   uploadFotiko,
@@ -326,4 +391,5 @@ module.exports = {
   getCredencial,
   getAsistencias,
   getHistorialAccesos,
+  getReportesEstudianteMovil,
 };

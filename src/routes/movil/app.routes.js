@@ -17,6 +17,7 @@ const {
   getAsistencias,
   getCredencial,
   getHistorialAccesos,
+  getReportesEstudianteMovil,
 } = require("../../controller/movil/estudianteMoController");
 
 router.get("/", (req, res) => {
@@ -39,5 +40,6 @@ router.get("/credencial", bitacoraConsultar, getCredencial);
 
 router.get("/accesos", bitacoraConsultar, getHistorialAccesos);
 router.get("/asistencia", bitacoraConsultar, getAsistencias);
+router.get("/reportes", bitacoraConsultar, getReportesEstudianteMovil);
 
 module.exports = router;
