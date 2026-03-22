@@ -21,6 +21,7 @@ const getAlumnosMovil = async (req, res) => {
             email: true,
             telefono: true,
             direccion: true,
+            curp: true,
           },
         },
         tutor: {
