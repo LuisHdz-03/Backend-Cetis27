@@ -192,11 +192,12 @@ const getCredencial = async (req, res) => {
             nombre: true,
             apellidoPaterno: true,
             apellidoMaterno: true,
+            curp: true, 
           },
         },
         grupo: {
           select: {
-            nombre: true,
+            nombre: true, 
             turno: true,
             especialidad: { select: { nombre: true } },
           },
@@ -209,7 +210,6 @@ const getCredencial = async (req, res) => {
 
     const tiempoActual = Date.now();
     const datosQR = `${estudiante.matricula}|${tiempoActual}`;
-
     const qrImage = await QRCode.toDataURL(datosQR);
 
     const formatearFechaMesAnio = (fecha) => {
@@ -228,9 +228,7 @@ const getCredencial = async (req, res) => {
         "noviembre",
         "diciembre",
       ];
-      const mes = meses[fecha.getMonth()];
-      const anio = fecha.getFullYear();
-      return `${mes} ${anio}`;
+      return `${meses[fecha.getMonth()]} ${fecha.getFullYear()}`;
     };
 
     const fechaEmisionFormateada = formatearFechaMesAnio(
@@ -242,11 +240,13 @@ const getCredencial = async (req, res) => {
 
     res.json({
       nombreCompleto: `${estudiante.usuario.nombre} ${estudiante.usuario.apellidoPaterno} ${estudiante.usuario.apellidoMaterno}`,
-      curp: estudiante.curp,
+      // ¡CORRECCIÓN 2: La CURP viene de 'usuario', no de 'estudiante' directo!
+      curp: estudiante.usuario.curp,
       noControl: estudiante.matricula,
       especialidad:
         estudiante.grupo?.especialidad?.nombre || "Sin Especialidad Asignada",
-
+      // ¡CORRECCIÓN 3: Agregamos el grupo al envío!
+      grupo: estudiante.grupo?.nombre || "Sin Grupo",
       turno: estudiante.grupo?.turno || "Sin Turno",
       emision: fechaEmisionFormateada,
       vigencia: fechaExpiracionFormateada,
@@ -257,7 +257,6 @@ const getCredencial = async (req, res) => {
     res.status(500).json({ error: "Error al generar la credencial." });
   }
 };
-
 const getHistorialAccesos = async (req, res) => {
   try {
     const idUsuario = req.usuario.id;
