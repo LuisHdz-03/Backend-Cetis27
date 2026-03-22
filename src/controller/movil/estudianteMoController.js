@@ -184,29 +184,22 @@ const getCredencial = async (req, res) => {
   try {
     const idUsuario = req.usuario.id;
 
+    // Usamos include para todo, es mucho más seguro en Prisma
     const estudiante = await prisma.estudiante.findUnique({
       where: { usuarioId: idUsuario },
       include: {
-        usuario: {
-          select: {
-            nombre: true,
-            apellidoPaterno: true,
-            apellidoMaterno: true,
-            curp: true, 
-          },
-        },
+        usuario: true, // Traemos todo el usuario (incluye la CURP)
         grupo: {
-          select: {
-            nombre: true, 
-            turno: true,
-            especialidad: { select: { nombre: true } },
+          include: {
+            especialidad: true, // Traemos la especialidad del grupo
           },
         },
       },
     });
 
-    if (!estudiante)
+    if (!estudiante) {
       return res.status(404).json({ error: "Estudiante no encontrado" });
+    }
 
     const tiempoActual = Date.now();
     const datosQR = `${estudiante.matricula}|${tiempoActual}`;
@@ -238,25 +231,33 @@ const getCredencial = async (req, res) => {
       estudiante.credencialFechaExpiracion,
     );
 
-    res.json({
+    // Armamos el objeto de respuesta de forma segura
+    const respuesta = {
       nombreCompleto: `${estudiante.usuario.nombre} ${estudiante.usuario.apellidoPaterno} ${estudiante.usuario.apellidoMaterno}`,
-      // ¡CORRECCIÓN 2: La CURP viene de 'usuario', no de 'estudiante' directo!
-      curp: estudiante.usuario.curp,
-      noControl: estudiante.matricula,
+      curp: estudiante.usuario.curp || "Sin CURP",
+      noControl: estudiante.matricula || "Sin Matrícula",
       especialidad:
         estudiante.grupo?.especialidad?.nombre || "Sin Especialidad Asignada",
-      // ¡CORRECCIÓN 3: Agregamos el grupo al envío!
       grupo: estudiante.grupo?.nombre || "Sin Grupo",
       turno: estudiante.grupo?.turno || "Sin Turno",
       emision: fechaEmisionFormateada,
       vigencia: fechaExpiracionFormateada,
       qrImage: qrImage,
+    };
+
+    // Imprimimos en la terminal del backend para verificar que sí manda los datos
+    console.log("Datos enviados a la app:", {
+      curp: respuesta.curp,
+      grupo: respuesta.grupo,
     });
+
+    res.json(respuesta);
   } catch (error) {
-    console.error(error);
+    console.error("Error en getCredencial:", error);
     res.status(500).json({ error: "Error al generar la credencial." });
   }
 };
+
 const getHistorialAccesos = async (req, res) => {
   try {
     const idUsuario = req.usuario.id;
