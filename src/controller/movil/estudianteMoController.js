@@ -208,14 +208,13 @@ const getCredencial = async (req, res) => {
   try {
     const idUsuario = req.usuario.id;
 
-    // Usamos include para todo, es mucho más seguro en Prisma
     const estudiante = await prisma.estudiante.findUnique({
       where: { usuarioId: idUsuario },
       include: {
-        usuario: true, // Traemos todo el usuario (incluye la CURP)
+        usuario: true,
         grupo: {
           include: {
-            especialidad: true, // Traemos la especialidad del grupo
+            especialidad: true,
           },
         },
       },
@@ -224,10 +223,6 @@ const getCredencial = async (req, res) => {
     if (!estudiante) {
       return res.status(404).json({ error: "Estudiante no encontrado" });
     }
-
-    const tiempoActual = Date.now();
-    const datosQR = `${estudiante.matricula}|${tiempoActual}`;
-    const qrImage = await QRCode.toDataURL(datosQR);
 
     const formatearFechaMesAnio = (fecha) => {
       if (!fecha) return "Por definir";
@@ -266,7 +261,6 @@ const getCredencial = async (req, res) => {
       turno: estudiante.grupo?.turno || "Sin Turno",
       emision: fechaEmisionFormateada,
       vigencia: fechaExpiracionFormateada,
-      qrImage: qrImage,
       fotoUrl: estudiante.fotoUrl || null,
     };
 
@@ -279,9 +273,10 @@ const getCredencial = async (req, res) => {
     res.json(respuesta);
   } catch (error) {
     console.error("Error en getCredencial:", error);
-    res.status(500).json({ error: "Error al generar la credencial." });
+    res.status(500).json({ error: "Error al obtener la credencial." });
   }
 };
+
 const getHistorialAccesos = async (req, res) => {
   try {
     const idUsuario = req.usuario.id;
