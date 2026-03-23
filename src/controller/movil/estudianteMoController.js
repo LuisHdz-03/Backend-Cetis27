@@ -204,7 +204,6 @@ const getCredencial = async (req, res) => {
     const tiempoActual = Date.now();
     const datosQR = `${estudiante.matricula}|${tiempoActual}`;
     const qrImage = await QRCode.toDataURL(datosQR);
-    const UrlFoto = await fotoUrl.toDataURL(fotoUrl);
 
     const formatearFechaMesAnio = (fecha) => {
       if (!fecha) return "Por definir";
@@ -244,7 +243,7 @@ const getCredencial = async (req, res) => {
       emision: fechaEmisionFormateada,
       vigencia: fechaExpiracionFormateada,
       qrImage: qrImage,
-      fotoUrl: UrlFoto,
+      fotoUrl: estudiante.fotoUrl || null,
     };
 
     // Imprimimos en la terminal del backend para verificar que sí manda los datos
