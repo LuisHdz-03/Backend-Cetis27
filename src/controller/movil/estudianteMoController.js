@@ -5,7 +5,17 @@ const fs = require("fs");
 const QRCode = require("qrcode");
 const cloudinary = require("cloudinary").v2;
 
-//configuracion del coudinary
+//configuracion del cloudinary
+if (
+  !process.env.CLOUDINARY_CLOUD_NAME ||
+  !process.env.CLOUDINARY_API_KEY ||
+  !process.env.CLOUDINARY_API_SECRET
+) {
+  console.error(
+    "⚠️  Faltan variables de entorno de Cloudinary: CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET",
+  );
+}
+
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
