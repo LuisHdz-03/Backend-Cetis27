@@ -3,6 +3,14 @@ const path = require("path");
 const sharp = require("sharp");
 const fs = require("fs");
 const QRCode = require("qrcode");
+const cloudinary = require("cloudinary");
+
+//configuracion del coudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 const getAlumnosMovil = async (req, res) => {
   try {
@@ -57,61 +65,68 @@ const getAlumnosMovil = async (req, res) => {
 const uploadFotiko = async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ mensaje: "no se encontro ninguna imagen" });
+      return res.status(400).json({ mensaje: "No se encontró ninguna imagen" });
     }
 
     const idUsuario = req.usuario.id;
-    const nombreArchivo = `perfil-${idUsuario}-${Date.now()}.jpeg`;
-    const carpetaUploads = path.join(__dirname, "../../../public/uploads");
-    const rutasCompletas = path.join(carpetaUploads, nombreArchivo);
 
-    if (!fs.existsSync(carpetaUploads)) {
-      fs.mkdirSync(carpetaUploads, { recursive: true });
-    }
-
-    await sharp(req.file.buffer)
+    const bufferProcesado = await sharp(req.file.buffer)
       .resize(500, 500, {
         fit: "cover",
         position: "attention",
       })
       .jpeg({ quality: 80 })
-      .toFile(rutasCompletas);
+      .toBuffer();
 
-    const nuevaFtUrl = `/uploads/${nombreArchivo}`;
+    const uploadToCloudinary = (buffer) => {
+      return new Promise((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream(
+          { folder: "fotos_chavales_cetis27" },
+          (error, result) => {
+            if (error) reject(error);
+            else resolve(result);
+          },
+        );
+        uploadStream.end(buffer);
+      });
+    };
+
+    const resultCloudinary = await uploadToCloudinary(bufferProcesado);
+    const nuevaFtUrl = resultCloudinary.secure_url;
 
     const estudiantePrevio = await prisma.estudiante.findUnique({
-      where: {
-        usuarioId: idUsuario,
-      },
+      where: { usuarioId: idUsuario },
       select: { fotoUrl: true },
     });
 
-    if (estudiantePrevio?.fotoUrl) {
-      const nombreViejo = estudiantePrevio.fotoUrl.startsWith("/")
-        ? estudiantePrevio.fotoUrl.substring(1)
-        : estudiantePrevio.fotoUrl;
-
-      const pathViejo = path.join(__dirname, "../../../public", nombreViejo);
-
+    if (
+      estudiantePrevio?.fotoUrl &&
+      estudiantePrevio.fotoUrl.includes("cloudinary")
+    ) {
       try {
-        fs.unlinkSync(pathViejo);
-        console.log(`Foto eliminada: ${pathViejo}`);
+        const urlParts = estudiantePrevio.fotoUrl.split("/");
+        const archivo = urlParts.pop().split(".")[0];
+        const carpeta = urlParts.pop();
+        const publicId = `${carpeta}/${archivo}`;
+
+        await cloudinary.uploader.destroy(publicId);
+        console.log(`Foto vieja eliminada de Cloudinary: ${publicId}`);
       } catch (e) {
-        if (e.code !== "ENOENT")
-          console.error("Error al borrar foto vieja:", e);
+        console.error("Error al borrar foto vieja en Cloudinary:", e);
       }
     }
+
     const estudianteActualizado = await prisma.estudiante.update({
       where: { usuarioId: idUsuario },
       data: { fotoUrl: nuevaFtUrl },
     });
 
     res.json({
-      mensaje: "Foto actualizada correctamente",
+      mensaje: "Foto actualizada correctamente en la nube",
       fotoUrl: estudianteActualizado.fotoUrl,
     });
   } catch (error) {
-    console.error(error);
+    console.error("Error al subir imagen a Cloudinary:", error);
     res.status(500).json({ error: "Error al procesar la imagen" });
   }
 };
