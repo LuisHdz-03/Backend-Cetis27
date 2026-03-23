@@ -3,7 +3,7 @@ const path = require("path");
 const sharp = require("sharp");
 const fs = require("fs");
 const QRCode = require("qrcode");
-const cloudinary = require("cloudinary");
+const cloudinary = require("cloudinary").v2;
 
 //configuracion del coudinary
 cloudinary.config({
