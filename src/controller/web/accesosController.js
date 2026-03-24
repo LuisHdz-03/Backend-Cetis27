@@ -44,6 +44,19 @@ const registrarAcceso = async (req, res) => {
       const fechaUltimo = new Date(ultimoAcceso.fechaHora);
       const fechaActual = new Date();
 
+      // ---> ESCUDO ANTI-DOBLE ESCANEO AGREGADO AQUÍ <---
+      // Si la diferencia es menor a 2 minutos (120,000 milisegundos), se bloquea.
+      const tiempoDesdeUltimoAcceso =
+        fechaActual.getTime() - fechaUltimo.getTime();
+      if (tiempoDesdeUltimoAcceso < 120000) {
+        return res.status(429).json({
+          error:
+            "Acceso ya registrado hace un momento. Por favor espere 2 minutos para volver a escanear.",
+          tipo_registrado: ultimoAcceso.tipo,
+        });
+      }
+      // --------------------------------------------------
+
       const esMismoDia =
         fechaUltimo.toDateString() === fechaActual.toDateString();
 
