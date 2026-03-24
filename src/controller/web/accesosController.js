@@ -55,8 +55,6 @@ const registrarAcceso = async (req, res) => {
           tipo_registrado: ultimoAcceso.tipo,
         });
       }
-      // --------------------------------------------------
-
       const esMismoDia =
         fechaUltimo.toDateString() === fechaActual.toDateString();
 
