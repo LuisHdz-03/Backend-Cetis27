@@ -49,6 +49,7 @@ const getAlumnosMovil = async (req, res) => {
             telefono: true,
             parentesco: true,
             direccion: true,
+            email: true,
           },
         },
         grupo: {
