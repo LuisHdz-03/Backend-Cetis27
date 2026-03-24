@@ -180,6 +180,7 @@ const actualizartutor = async (req, res) => {
     const estudianteActualizado = await prisma.estudiante.update({
       where: { idEstudiante: estudiante.idEstudiante },
       data: {
+        datosVerificados: true,
         tutor: {
           create: {
             nombre,
