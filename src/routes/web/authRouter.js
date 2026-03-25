@@ -11,8 +11,9 @@ const {
   bitacoraLogin,
   bitacoraActualizar,
 } = require("../../middlewares/bitacoraMiddleware");
+const { loginLimiter } = require("../../middlewares/rateLimitMiddleware");
 
-router.post("/login", bitacoraLogin, login);
+router.post("/login", loginLimiter, bitacoraLogin, login);
 router.put(
   "/cambiar-password",
   verificarToken,

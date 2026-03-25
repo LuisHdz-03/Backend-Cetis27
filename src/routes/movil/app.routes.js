@@ -9,6 +9,7 @@ const {
   bitacoraCrear,
 } = require("../../middlewares/bitacoraMiddleware");
 const uploads = require("../../middlewares/uploadMiddleware");
+const { loginLimiter } = require("../../middlewares/rateLimitMiddleware");
 const { login } = require("../../controller/auth/authController");
 const {
   getAlumnosMovil,
@@ -18,13 +19,14 @@ const {
   getCredencial,
   getHistorialAccesos,
   getReportesEstudianteMovil,
+  cambiarContrasenia,
 } = require("../../controller/movil/estudianteMoController");
 
 router.get("/", (req, res) => {
   res.json({ mensaje: "Bienvenido a la App Móvil (Estudiantes/Docentes)" });
 });
 
-router.post("/auth/login", bitacoraLogin, login);
+router.post("/auth/login", loginLimiter, bitacoraLogin, login);
 router.use(verificarToken);
 
 router.get("/perfil", bitacoraConsultar, getAlumnosMovil);
@@ -35,6 +37,8 @@ router.put(
   uploadFotiko,
 );
 router.post("/perfil/tutor", bitacoraCrear, actualizartutor);
+
+router.put("/perfil/contrasenia", bitacoraActualizar, cambiarContrasenia);
 
 router.get("/credencial", bitacoraConsultar, getCredencial);
 

@@ -1,4 +1,5 @@
 const prisma = require("../../config/prisma");
+const bcrypt = require("bcryptjs");
 const path = require("path");
 const sharp = require("sharp");
 const fs = require("fs");
@@ -406,6 +407,64 @@ const getReportesEstudianteMovil = async (req, res) => {
   }
 };
 
+const cambiarContrasenia = async (req, res) => {
+  try {
+    const idUsuario = req.usuario.id;
+    const { passwordActual, passwordNueva, passwordConfirmar } = req.body;
+
+    if (!passwordActual || !passwordNueva || !passwordConfirmar) {
+      return res.status(400).json({
+        error:
+          "Debes proporcionar la contraseña actual, la nueva y su confirmación.",
+      });
+    }
+
+    if (passwordNueva !== passwordConfirmar) {
+      return res.status(400).json({
+        error: "La nueva contraseña y su confirmación no coinciden.",
+      });
+    }
+
+    if (passwordNueva.length < 8) {
+      return res.status(400).json({
+        error: "La nueva contraseña debe tener al menos 8 caracteres.",
+      });
+    }
+
+    const usuario = await prisma.usuario.findUnique({
+      where: { idUsuario },
+      select: { password: true },
+    });
+
+    if (!usuario) {
+      return res.status(404).json({ error: "Usuario no encontrado." });
+    }
+
+    const passwordValida = await bcrypt.compare(
+      passwordActual,
+      usuario.password,
+    );
+
+    if (!passwordValida) {
+      return res
+        .status(401)
+        .json({ error: "La contraseña actual es incorrecta." });
+    }
+
+    const hashNueva = await bcrypt.hash(passwordNueva, 10);
+
+    await prisma.usuario.update({
+      where: { idUsuario },
+      data: { password: hashNueva },
+    });
+
+    res.json({ mensaje: "Contraseña actualizada correctamente." });
+  } catch (error) {
+    console.error("Error al cambiar contraseña:", error);
+    res.status(500).json({ error: "Error al cambiar la contraseña." });
+  }
+};
+
 module.exports = {
   getAlumnosMovil,
   uploadFotiko,
@@ -414,4 +473,5 @@ module.exports = {
   getAsistencias,
   getHistorialAccesos,
   getReportesEstudianteMovil,
+  cambiarContrasenia,
 };
