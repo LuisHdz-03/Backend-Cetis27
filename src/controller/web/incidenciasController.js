@@ -13,8 +13,6 @@ const crearReporte = async (req, res) => {
       reportadoPor,
     } = req.body;
 
-    console.log("=== DATOS RECIBIDOS EN EL BACKEND ===", req.body);
-
     if (!titulo || !descripcion || !estudianteId) {
       return res.status(400).json({
         mensaje:
@@ -75,6 +73,17 @@ const getReporte = async (req, res) => {
             grupo: {
               include: {
                 especialidad: true,
+              },
+            },
+            tutor: {
+              select: {
+                nombre: true,
+                apellidoPaterno: true,
+                apellidoMaterno: true,
+                telefono: true,
+                parentesco: true,
+                email: true,
+                direccion: true,
               },
             },
           },
