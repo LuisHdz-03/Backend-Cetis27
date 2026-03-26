@@ -98,11 +98,10 @@ const crearAdministrativo = async (req, res) => {
 
       const perfil = await tx.administrativo.create({
         data: {
-          numeroEmpleado: numEmpleadoLimpio,
+          numeroEmpleado: numeroEmpleado ? numEmpleadoLimpio : null,
           cargo: cargoNormalizado,
-          area,
-          usuarioId: usuario.idUsuario,
           area: area || "Administración General",
+          usuarioId: usuario.idUsuario,
         },
       });
 
@@ -414,10 +413,13 @@ const actualizarAdministrativo = async (req, res) => {
       if (telefono !== undefined) usuarioData.telefono = telefono;
       if (activo !== undefined) usuarioData.activo = activo;
 
-      const usuarioActualizado = await tx.usuario.update({
-        where: { idUsuario: admin.usuarioId },
-        data: usuarioData,
-      });
+      let usuarioActualizado = admin.usuario;
+      if (Object.keys(usuarioData).length > 0) {
+        usuarioActualizado = await tx.usuario.update({
+          where: { idUsuario: admin.usuarioId },
+          data: usuarioData,
+        });
+      }
 
       // Actualizar administrativo si hay cambios
       const adminData = {};
@@ -426,10 +428,13 @@ const actualizarAdministrativo = async (req, res) => {
       if (numeroEmpleado !== undefined)
         adminData.numeroEmpleado = limpiarMatricula(numeroEmpleado);
 
-      const adminActualizado = await tx.administrativo.update({
-        where: { idAdministrativo: adminId },
-        data: adminData,
-      });
+      let adminActualizado = admin;
+      if (Object.keys(adminData).length > 0) {
+        adminActualizado = await tx.administrativo.update({
+          where: { idAdministrativo: adminId },
+          data: adminData,
+        });
+      }
 
       return { usuario: usuarioActualizado, administrativo: adminActualizado };
     });

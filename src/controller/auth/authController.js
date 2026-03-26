@@ -54,10 +54,15 @@ const login = async (req, res) => {
     }
 
     let perfilData = null;
-    if (usuario.rol === "ALUMNO") perfilData = usuario.perfilEstudiante;
-    else if (usuario.rol === "DOCENTE") perfilData = usuario.perfilDocente;
-    else if (usuario.rol === "ADMINISTRATIVO" || usuario.rol === "PREFECTO")
+    if (usuario.rol === "ALUMNO") {
+      perfilData = usuario.perfilEstudiante;
+    } else if (usuario.rol === "DOCENTE") {
+      perfilData = usuario.perfilDocente;
+    } else if (usuario.rol === "ADMINISTRATIVO") {
       perfilData = usuario.perfilAdministrativo;
+    } else if (usuario.rol === "PREFECTO") {
+      perfilData = usuario.perfilAdministrativo;
+    }
 
     const token = jwt.sign(
       {
