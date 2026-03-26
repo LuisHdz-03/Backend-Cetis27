@@ -72,3 +72,9 @@ const registrarAsistencia = async (req, res) => {
     res.status(500).json({ mensaje: "Error interno al tomar las asistencias" });
   }
 };
+module.exports = {
+  registrarAsistencia,
+  getAsisPorFecha,
+  justificarFalta,
+  getHistorialAsistencias,
+};
