@@ -498,7 +498,7 @@ const getEstudiantesPorGrupo = async (req, res) => {
             apellidoMaterno: true,
           },
         },
-        tutor: true, // <--- AQUÍ ESTÁ LA CORRECCIÓN CLAVE
+        tutor: true, 
       },
       orderBy: {
         usuario: {
