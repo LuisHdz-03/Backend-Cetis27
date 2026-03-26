@@ -3,11 +3,18 @@ const bcrypt = require("bcryptjs");
 const XLSX = require("xlsx");
 
 const limpiarMatricula = (valor) => {
-  const numStr = String(valor);
-  if (/[eE]/.test(numStr)) {
-    return parseFloat(numStr).toFixed(0);
+  if (valor === undefined || valor === null) return null;
+  const numStr = String(valor).trim();
+
+  if (/^\d+(\.\d+)?[eE][+\-]?\d+$/.test(numStr)) {
+    const numeroConvertido = parseFloat(numStr);
+    if (!isNaN(numeroConvertido)) {
+      return numeroConvertido.toFixed(0);
+    }
   }
-  return numStr.trim();
+
+  // Si es un texto normal, lo devuelve intacto
+  return numStr;
 };
 
 const extraerFechaDesdeCURP = (curp) => {
