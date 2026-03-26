@@ -79,6 +79,7 @@ const registrarAsistencia = async (req, res) => {
     res.status(500).json({ mensaje: "Error interno al tomar las asistencias" });
   }
 };
+
 const getAsisPorFecha = async (req, res) => {
   try {
     const { claseId, fecha } = req.query;

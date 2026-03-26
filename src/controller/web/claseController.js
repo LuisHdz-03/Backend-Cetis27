@@ -39,7 +39,37 @@ const crearClase = async (req, res) => {
 
 const getClase = async (req, res) => {
   try {
-    const clase = await prisma.clase.findMany({
+    // 1. Recibimos parámetros de la URL (si no mandan, se usan valores por defecto)
+    const pagina = parseInt(req.query.pagina) || 1;
+    const limite = parseInt(req.query.limite) || 50;
+
+    // Filtros opcionales
+    const { docenteId, grupoId, materiaId, buscarMateria } = req.query;
+
+    // 2. Armamos el objeto dinámico de filtros (empezamos vacío)
+    let filtro = {};
+
+    if (docenteId) {
+      filtro.docenteId = parseInt(docenteId);
+    }
+    if (grupoId) {
+      filtro.grupoId = parseInt(grupoId);
+    }
+    if (materiaId) {
+      filtro.materiaId = parseInt(materiaId);
+    }
+    if (buscarMateria) {
+      // Para buscar materias escribiendo un pedazo del nombre
+      filtro.materias = {
+        nombre: { contains: buscarMateria },
+      };
+    }
+
+    // 3. Ejecutamos la consulta a Prisma con Paginación y Filtros
+    const clases = await prisma.clase.findMany({
+      where: filtro,
+      skip: (pagina - 1) * limite,
+      take: limite,
       include: {
         grupo: {
           select: {
@@ -67,7 +97,22 @@ const getClase = async (req, res) => {
         periodo: true,
       },
     });
-    res.json(clase);
+
+    // 4. Contamos cuántos registros hay en total para la paginación del frontend
+    const totalRegistros = await prisma.clase.count({
+      where: filtro,
+    });
+
+    // 5. Mandamos la respuesta estructurada
+    res.json({
+      data: clases,
+      paginacion: {
+        totalRegistros,
+        paginasTotales: Math.ceil(totalRegistros / limite),
+        paginaActual: pagina,
+        limite: limite,
+      },
+    });
   } catch (error) {
     console.error("Error al traer clases:", error);
     res.status(500).json({ error: "No se pudieron traer las clases" });

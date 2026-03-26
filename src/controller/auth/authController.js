@@ -56,7 +56,7 @@ const login = async (req, res) => {
     let perfilData = null;
     if (usuario.rol === "ALUMNO") perfilData = usuario.perfilEstudiante;
     else if (usuario.rol === "DOCENTE") perfilData = usuario.perfilDocente;
-    else if (usuario.rol === "ADMINISTRATIVO")
+    else if (usuario.rol === "ADMINISTRATIVO" || usuario.rol === "PREFECTO")
       perfilData = usuario.perfilAdministrativo;
 
     const token = jwt.sign(
@@ -84,7 +84,10 @@ const login = async (req, res) => {
       usuario: {
         id: usuario.idUsuario,
         nombre: usuario.nombre,
+        apellidoPaterno: usuario.apellidoPaterno || "", // ← AÑADIR
+        apellidoMaterno: usuario.apellidoMaterno || "", // ← AÑADIR
         rol: usuario.rol,
+        cargo: perfilData?.cargo || null, // ← AÑADIR cargo explícito
         foto: usuario.fotoUrl,
         datos: perfilData,
       },
