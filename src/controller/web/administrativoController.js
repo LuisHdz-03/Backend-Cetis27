@@ -155,7 +155,7 @@ const getAdministrativos = async (req, res) => {
       email: a.usuario.email,
       cargo: a.cargo,
       area: a.area,
-      numEmpleado: a.numeroEmpleado,
+      numeroEmpleado: a.numeroEmpleado,
       rol: a.usuario.rol,
       activo: a.usuario.activo,
     }));
