@@ -84,10 +84,10 @@ const login = async (req, res) => {
       usuario: {
         id: usuario.idUsuario,
         nombre: usuario.nombre,
-        apellidoPaterno: usuario.apellidoPaterno || "", // ← AÑADIR
-        apellidoMaterno: usuario.apellidoMaterno || "", // ← AÑADIR
+        apellidoPaterno: usuario.apellidoPaterno || "",
+        apellidoMaterno: usuario.apellidoMaterno || "",
         rol: usuario.rol,
-        cargo: perfilData?.cargo || null, // ← AÑADIR cargo explícito
+        cargo: perfilData?.cargo || null,
         foto: usuario.fotoUrl,
         datos: perfilData,
       },
