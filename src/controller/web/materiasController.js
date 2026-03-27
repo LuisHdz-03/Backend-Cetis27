@@ -254,10 +254,43 @@ const cargarMateriasMasivas = async (req, res) => {
   }
 };
 
+const getMateriasPorEspecialidad = async (req, res) => {
+  try {
+    // Tomamos el ID directamente de la URL (params)
+    const { especialidadId } = req.params;
+
+    if (isNaN(parseInt(especialidadId))) {
+      return res.status(400).json({ error: "ID de especialidad inválido" });
+    }
+
+    const materias = await prisma.materia.findMany({
+      where: {
+        especialidadId: parseInt(especialidadId),
+      },
+      include: {
+        especialidad: {
+          select: { nombre: true },
+        },
+      },
+      orderBy: {
+        semestre: "asc", // Ordenadas por semestre
+      },
+    });
+
+    res.json(materias);
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({ error: "Error al obtener materias por especialidad" });
+  }
+};
+
 module.exports = {
   crearMateria,
   getMateria,
   actualizarMateria,
   eliminarMateria,
   cargarMateriasMasivas,
+  getMateriasPorEspecialidad,
 };

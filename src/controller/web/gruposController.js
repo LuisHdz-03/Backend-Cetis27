@@ -1,9 +1,18 @@
 const prisma = require("../../config/prisma");
 const XLSX = require("xlsx");
-
 const crearGrupo = async (req, res) => {
   try {
-    const { nombre, grado, turno, aula, periodoId, especialidadId } = req.body;
+    // 1. Ahora también recibimos el docenteId y materiasIds (array)
+    const {
+      nombre,
+      grado,
+      turno,
+      aula,
+      periodoId,
+      especialidadId,
+      docenteId, // NUEVO
+      materiasIds, // NUEVO: Array de IDs [1, 2, 3]
+    } = req.body;
 
     if (!periodoId || !especialidadId) {
       return res
@@ -11,22 +20,47 @@ const crearGrupo = async (req, res) => {
         .json({ error: "Faltan IDs de Periodo o Especialidad" });
     }
 
-    const nuevoGrupo = await prisma.grupo.create({
-      data: {
-        nombre,
-        grado: parseInt(grado),
-        turno,
-        aula,
-        periodoId: parseInt(periodoId),
-        especialidadId: parseInt(especialidadId),
-      },
+    // 2. Usamos una transacción para crear el grupo Y sus clases al mismo tiempo
+    const nuevoGrupo = await prisma.$transaction(async (tx) => {
+      // A. Crear el grupo
+      const grupoCreado = await tx.grupo.create({
+        data: {
+          nombre,
+          grado: parseInt(grado),
+          turno,
+          aula,
+          periodoId: parseInt(periodoId),
+          especialidadId: parseInt(especialidadId),
+        },
+      });
+
+      // B. Si mandaron docente y materias, creamos los registros en "Clase"
+      if (
+        docenteId &&
+        materiasIds &&
+        Array.isArray(materiasIds) &&
+        materiasIds.length > 0
+      ) {
+        const clasesData = materiasIds.map((materiaId) => ({
+          grupoId: grupoCreado.idGrupo,
+          docenteId: parseInt(docenteId),
+          materiaId: parseInt(materiaId),
+          periodoId: parseInt(periodoId),
+        }));
+
+        await tx.clase.createMany({
+          data: clasesData,
+        });
+      }
+
+      return grupoCreado;
     });
 
     res
       .status(201)
       .json({ mensaje: "Grupo creado exitosamente", grupo: nuevoGrupo });
   } catch (error) {
-    console.error(error);
+    console.error("Error al crear grupo con materias:", error);
     res.status(500).json({ error: "Error al crear grupo" });
   }
 };
@@ -34,12 +68,27 @@ const crearGrupo = async (req, res) => {
 const getGrupos = async (req, res) => {
   try {
     const grupos = await prisma.grupo.findMany({
+      where: {
+        periodo: {
+          activo: true,
+        },
+      },
       include: {
         especialidad: {
           select: { nombre: true, codigo: true },
         },
         periodo: {
-          select: { nombre: true },
+          select: { nombre: true, activo: true },
+        },
+        clases: {
+          include: {
+            materias: true,
+            docente: {
+              include: {
+                usuario: { select: { nombre: true, apellidoPaterno: true } },
+              },
+            },
+          },
         },
         _count: {
           select: { estudiantes: true },
@@ -56,7 +105,6 @@ const getGrupos = async (req, res) => {
   }
 };
 
-// Esta es la función que habías borrado por accidente
 const getGrupoById = async (req, res) => {
   const { id } = req.params;
   try {
@@ -76,6 +124,18 @@ const getGrupoById = async (req, res) => {
           orderBy: { usuario: { apellidoPaterno: "asc" } },
         },
         especialidad: true,
+        periodo: true,
+        // Incluimos las materias también en el detalle del grupo
+        clases: {
+          include: {
+            materias: true,
+            docente: {
+              include: {
+                usuario: { select: { nombre: true, apellidoPaterno: true } },
+              },
+            },
+          },
+        },
       },
     });
     if (!grupo) return res.status(404).json({ error: "Grupo no encontrado" });
@@ -96,7 +156,6 @@ const actualizarGrupo = async (req, res) => {
       return res.status(400).json({ error: "ID de grupo inválido" });
     }
 
-    // Verificar que el grupo existe
     const grupoExiste = await prisma.grupo.findUnique({
       where: { idGrupo: grupoId },
     });
@@ -105,7 +164,6 @@ const actualizarGrupo = async (req, res) => {
       return res.status(404).json({ error: "Grupo no encontrado" });
     }
 
-    // Validar turno si se proporciona
     const turnosValidos = ["MATUTINO", "VESPERTINO", "MIXTO"];
     if (turno) {
       const turnoNormalizado = turno.trim().toUpperCase();
@@ -116,7 +174,6 @@ const actualizarGrupo = async (req, res) => {
       }
     }
 
-    // Validar especialidad si se proporciona
     if (especialidadId) {
       const especialidadExiste = await prisma.especialidad.findUnique({
         where: { idEspecialidad: parseInt(especialidadId) },
@@ -129,7 +186,6 @@ const actualizarGrupo = async (req, res) => {
       }
     }
 
-    // Validar periodo si se proporciona
     if (periodoId) {
       const periodoExiste = await prisma.periodo.findUnique({
         where: { idPeriodo: parseInt(periodoId) },
@@ -142,7 +198,6 @@ const actualizarGrupo = async (req, res) => {
       }
     }
 
-    // Actualizar grupo
     const dataActualizar = {};
     if (nombre !== undefined) dataActualizar.nombre = nombre.trim();
     if (grado !== undefined) dataActualizar.grado = parseInt(grado);
@@ -185,6 +240,7 @@ const eliminarGrupo = async (req, res) => {
     res.status(500).json({ error: "Error al eliminar el grupo" });
   }
 };
+
 const cargarGruposMasivos = async (req, res) => {
   try {
     if (!req.file) {
@@ -198,7 +254,6 @@ const cargarGruposMasivos = async (req, res) => {
     const errores = [];
     const datosInsertados = [];
 
-    // Buscamos el periodo activo para asignarle los grupos por defecto
     const periodoActivo = await prisma.periodo.findFirst({
       where: { activo: true },
     });
@@ -208,18 +263,16 @@ const cargarGruposMasivos = async (req, res) => {
         .json({ error: "No hay un periodo activo. Crea uno primero." });
     }
 
-    // Turnos válidos según el enum del schema
     const turnosValidos = ["MATUTINO", "VESPERTINO", "MIXTO"];
 
     for (const fila of datosExcel) {
-      const nombre = fila["NOMBRE"]; // Ej. "1A"
-      const grado = fila["GRADO"]; // Ej. 1
-      const turno = fila["TURNO"]; // Ej. "MATUTINO"
-      const aula = fila["AULA"]; // Ej. "A-101" (opcional)
-      const especialidadNombre = fila["ESPECIALIDAD"]; // Ej. "PROGRAMACION"
-      const periodoNombre = fila["PERIODO"]; // Opcional, ej. "2024-2025"
+      const nombre = fila["NOMBRE"];
+      const grado = fila["GRADO"];
+      const turno = fila["TURNO"];
+      const aula = fila["AULA"];
+      const especialidadNombre = fila["ESPECIALIDAD"];
+      const periodoNombre = fila["PERIODO"];
 
-      // Validar campos obligatorios
       if (!nombre || !grado || !turno || !especialidadNombre) {
         errores.push({
           registro: nombre || "Desconocido",
@@ -228,7 +281,6 @@ const cargarGruposMasivos = async (req, res) => {
         continue;
       }
 
-      // Validar turno
       const turnoNormalizado = String(turno).trim().toUpperCase();
       if (!turnosValidos.includes(turnoNormalizado)) {
         errores.push({
@@ -239,7 +291,6 @@ const cargarGruposMasivos = async (req, res) => {
       }
 
       try {
-        // Buscar la especialidad por nombre
         const especialidadExiste = await prisma.especialidad.findFirst({
           where: {
             nombre: {
@@ -257,7 +308,6 @@ const cargarGruposMasivos = async (req, res) => {
           continue;
         }
 
-        // Si se especifica un periodo, buscar por nombre
         let periodoFinal = periodoActivo.idPeriodo;
         if (periodoNombre) {
           const periodoExiste = await prisma.periodo.findFirst({
@@ -279,7 +329,6 @@ const cargarGruposMasivos = async (req, res) => {
           periodoFinal = periodoExiste.idPeriodo;
         }
 
-        // Crear o actualizar el grupo
         const grupoExistente = await prisma.grupo.findFirst({
           where: {
             nombre: String(nombre).trim(),
@@ -290,7 +339,6 @@ const cargarGruposMasivos = async (req, res) => {
         });
 
         if (grupoExistente) {
-          // Si existe, actualizar solo los campos que sean diferentes
           const grupoUpdate = {};
           if (turnoNormalizado !== grupoExistente.turno)
             grupoUpdate.turno = turnoNormalizado;
@@ -305,7 +353,6 @@ const cargarGruposMasivos = async (req, res) => {
           }
           datosInsertados.push(nombre);
         } else {
-          // Si no existe, crear nuevo
           const nuevoGrupo = await prisma.grupo.create({
             data: {
               nombre: String(nombre).trim(),

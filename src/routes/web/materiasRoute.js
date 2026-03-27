@@ -19,6 +19,7 @@ const {
   actualizarMateria,
   eliminarMateria,
   cargarMateriasMasivas,
+  getMateriasPorEspecialidad,
 } = require("../../controller/web/materiasController");
 
 router.post("/", verificarToken, bitacoraCrear, crearMateria);
@@ -31,6 +32,12 @@ router.post(
   upload.single("archivoExcel"),
   bitacoraCargaMasiva,
   cargarMateriasMasivas,
+);
+router.get(
+  "/especialidad/:especialidadId",
+  verificarToken,
+  bitacoraConsultar,
+  getMateriasPorEspecialidad,
 );
 
 module.exports = router;
