@@ -1,8 +1,8 @@
 const prisma = require("../../config/prisma");
 const XLSX = require("xlsx");
+
 const crearGrupo = async (req, res) => {
   try {
-    // 1. Ahora también recibimos el docenteId y materiasIds (array)
     const {
       nombre,
       grado,
@@ -10,8 +10,8 @@ const crearGrupo = async (req, res) => {
       aula,
       periodoId,
       especialidadId,
-      docenteId, // NUEVO
-      materiasIds, // NUEVO: Array de IDs [1, 2, 3]
+      docenteId,
+      materiasIds,
     } = req.body;
 
     if (!periodoId || !especialidadId) {
@@ -20,9 +20,7 @@ const crearGrupo = async (req, res) => {
         .json({ error: "Faltan IDs de Periodo o Especialidad" });
     }
 
-    // 2. Usamos una transacción para crear el grupo Y sus clases al mismo tiempo
     const nuevoGrupo = await prisma.$transaction(async (tx) => {
-      // A. Crear el grupo
       const grupoCreado = await tx.grupo.create({
         data: {
           nombre,
@@ -34,7 +32,6 @@ const crearGrupo = async (req, res) => {
         },
       });
 
-      // B. Si mandaron docente y materias, creamos los registros en "Clase"
       if (
         docenteId &&
         materiasIds &&
@@ -68,11 +65,8 @@ const crearGrupo = async (req, res) => {
 const getGrupos = async (req, res) => {
   try {
     const grupos = await prisma.grupo.findMany({
-      where: {
-        periodo: {
-          activo: true,
-        },
-      },
+      // ¡AQUÍ ESTÁ EL CAMBIO IMPORTANTE!
+      // Quitamos el 'where' para que traiga TODOS los grupos sin importar el periodo.
       include: {
         especialidad: {
           select: { nombre: true, codigo: true },
@@ -125,7 +119,6 @@ const getGrupoById = async (req, res) => {
         },
         especialidad: true,
         periodo: true,
-        // Incluimos las materias también en el detalle del grupo
         clases: {
           include: {
             materias: true,
