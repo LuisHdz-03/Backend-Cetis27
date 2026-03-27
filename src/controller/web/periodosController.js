@@ -29,11 +29,21 @@ const crearPeriodo = async (req, res) => {
 
 const getPeriodos = async (req, res) => {
   try {
+    const { activos } = req.query;
+
+    let whereClause = {};
+    if (activos === "true") {
+      whereClause.activo = true; 
+    }
+
     const periodos = await prisma.periodo.findMany({
+      where: whereClause, 
       orderBy: { fechaInicio: "desc" },
     });
+
     res.json(periodos);
   } catch (error) {
+    console.error("Error al obtener periodos:", error);
     res.status(500).json({ error: "Error al obtener periodos." });
   }
 };
