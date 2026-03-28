@@ -306,45 +306,40 @@ const getAsistencias = async (req, res) => {
   try {
     const idUsuario = req.usuario.id;
 
-    // 1. Buscamos al estudiante asociado al usuario del token
+    const periodoActivo = await prisma.periodo.findFirst({
+      where: { activo: true },
+    });
+
     const estudiante = await prisma.estudiante.findUnique({
       where: { usuarioId: idUsuario },
       select: { idEstudiante: true },
     });
 
-    if (!estudiante) {
-      return res
-        .status(404)
-        .json({ error: "Perfil de estudiante no encontrado" });
-    }
-
-    // 2. Consultamos las asistencias usando las relaciones del schema
     const asistencias = await prisma.asistencia.findMany({
-      where: { alumnoId: estudiante.idEstudiante },
+      where: {
+        alumnoId: estudiante.idEstudiante,
+        clase: {
+          periodoId: periodoActivo?.idPeriodo,
+        },
+      },
       include: {
         clase: {
           include: {
-            materias: {
-              select: { nombre: true },
-            },
+            materias: { select: { nombre: true } },
             docente: {
               include: {
-                usuario: {
-                  select: { nombre: true, apellidoPaterno: true },
-                },
+                usuario: { select: { nombre: true, apellidoPaterno: true } },
               },
             },
           },
         },
       },
       orderBy: { fecha: "desc" },
-      take: 50, // Limitamos a las últimas 50 para mejor rendimiento
     });
 
-    // 3. Mapeamos al formato que espera la App móvil
     const historialLimpio = asistencias.map((a) => ({
       fecha: a.fecha,
-      estatus: a.estatus, // En tu schema se llama 'estatus'
+      estatus: a.estatus,
       materia: a.clase?.materias?.nombre || "Materia no asignada",
       docente: a.clase?.docente?.usuario
         ? `${a.clase.docente.usuario.nombre} ${a.clase.docente.usuario.apellidoPaterno}`
@@ -353,16 +348,13 @@ const getAsistencias = async (req, res) => {
 
     res.json(historialLimpio);
   } catch (error) {
-    console.error("Error detallado en getAsistencias:", error);
-    res.status(500).json({ error: "Error interno al obtener las asistencias" });
+    res.status(500).json({ error: "Error al obtener asistencias" });
   }
 };
 
 const getReportesEstudianteMovil = async (req, res) => {
   try {
-    const idUsuario = req.usuario.id; // Obtenido del token verificado
-
-    // 1. Buscamos el ID del estudiante asociado al usuario
+    const idUsuario = req.usuario.id;
     const estudiante = await prisma.estudiante.findUnique({
       where: { usuarioId: idUsuario },
       select: { idEstudiante: true },
