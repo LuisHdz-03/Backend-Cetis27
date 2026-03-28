@@ -117,10 +117,7 @@ const getEstudiantes = async (req, res) => {
           },
         },
         grupo: {
-          select: {
-            nombre: true,
-            grado: true,
-            turno: true,
+          include: {
             especialidad: true,
           },
         },
@@ -128,10 +125,17 @@ const getEstudiantes = async (req, res) => {
       },
     });
 
-    res.json(estudiantes);
+    // Mapeamos los datos para que el Front no reciba errores si el grupo es null
+    const estudiantesFormateados = estudiantes.map((est) => ({
+      ...est,
+      especialidadNombre: est.grupo?.especialidad?.nombre || "Sin Especialidad",
+      grupoNombre: est.grupo?.nombre || "Sin Grupo",
+    }));
+
+    res.json(estudiantesFormateados);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ erro: "Error al obtener los alumnos" });
+    console.error("ERROR AL OBTENER ESTUDIANTES:", error);
+    res.status(500).json({ error: "Error interno al obtener los alumnos" });
   }
 };
 
@@ -498,7 +502,7 @@ const getEstudiantesPorGrupo = async (req, res) => {
             apellidoMaterno: true,
           },
         },
-        tutor: true, 
+        tutor: true,
       },
       orderBy: {
         usuario: {
