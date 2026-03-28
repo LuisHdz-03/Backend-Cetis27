@@ -37,7 +37,7 @@ const getPeriodos = async (req, res) => {
     }
 
     const periodos = await prisma.periodo.findMany({
-      where: whereClause,
+      where: whereClause, // 3. Aplicamos el filtro a la consulta
       orderBy: { fechaInicio: "desc" },
     });
 
@@ -71,93 +71,53 @@ const setPeriodoActual = async (req, res) => {
 
 const cerrarPeriodoYPromover = async (req, res) => {
   const { id } = req.params;
-  const idPeriodoCerrar = parseInt(id);
+  const idPeriodo = parseInt(id);
+
+  if (isNaN(idPeriodo)) {
+    return res.status(400).json({ error: "ID de periodo inválido" });
+  }
 
   try {
-    const resultado = await prisma.$transaction(
-      async (tx) => {
-        // 1. Buscamos el periodo que acaba de quedar activo
-        const periodoDestino = await tx.periodo.findFirst({
-          where: { activo: true },
-        });
+    await prisma.$transaction(async (tx) => {
+      // 1. Desactivar el periodo actual
+      await tx.periodo.update({
+        where: { idPeriodo: idPeriodo },
+        data: { activo: false },
+      });
 
-        if (!periodoDestino) {
-          throw new Error(
-            "Primero debes crear y activar el nuevo periodo (el siguiente semestre).",
-          );
-        }
+      const estudiantesSexto = await tx.estudiante.findMany({
+        where: { semestre: 6 },
+        select: { usuarioId: true },
+      });
 
-        // 2. Desactivamos el periodo viejo
-        await tx.periodo.update({
-          where: { idPeriodo: idPeriodoCerrar },
+      const idsUsuariosSexto = estudiantesSexto.map((e) => e.usuarioId);
+
+      if (idsUsuariosSexto.length > 0) {
+        await tx.usuario.updateMany({
+          where: { idUsuario: { in: idsUsuariosSexto } },
           data: { activo: false },
         });
+      }
 
-        // 3. Egresar 6to semestre (Desactivar usuarios)
-        const alumnosSexto = await tx.estudiante.findMany({
-          where: { semestre: 6, usuario: { activo: true } },
-          select: { usuarioId: true },
-        });
+      await tx.estudiante.updateMany({
+        where: {
+          semestre: { lt: 6 },
+          usuario: { activo: true },
+        },
+        data: {
+          semestre: { increment: 1 },
+          grupoId: null,
+        },
+      });
+    });
 
-        if (alumnosSexto.length > 0) {
-          await tx.usuario.updateMany({
-            where: { idUsuario: { in: alumnosSexto.map((a) => a.usuarioId) } },
-            data: { activo: false },
-          });
-        }
-
-        // 4. Promoción Inteligente (Optimizado)
-        const estudiantes = await tx.estudiante.findMany({
-          where: { semestre: { lt: 6 }, usuario: { activo: true } },
-          include: { grupo: true },
-        });
-
-        // Usamos Promise.all para que sea más rápido y no sature la transacción
-        const promesasPromocion = estudiantes.map(async (estudiante) => {
-          let nuevoGrupoId = null;
-
-          if (estudiante.grupo) {
-            // Buscamos el grupo par en el periodo destino (Ej: de 1A a 2A)
-            const grupoPar = await tx.grupo.findFirst({
-              where: {
-                nombre: estudiante.grupo.nombre,
-                grado: estudiante.semestre + 1,
-                especialidadId: estudiante.grupo.especialidadId,
-                periodoId: periodoDestino.idPeriodo,
-              },
-            });
-            if (grupoPar) nuevoGrupoId = grupoPar.idGrupo;
-          }
-
-          return tx.estudiante.update({
-            where: { idEstudiante: estudiante.idEstudiante },
-            data: {
-              semestre: { increment: 1 },
-              grupoId: nuevoGrupoId, // Si no hay grupo par, queda en null pero sube de semestre
-            },
-          });
-        });
-
-        await Promise.all(promesasPromocion);
-
-        return {
-          conteo: estudiantes.length,
-          periodoNuevo: periodoDestino.nombre,
-        };
-      },
-      {
-        timeout: 10000, // Aumentamos el tiempo de espera de la transacción a 10 segundos
-      },
-    );
-
-    res.json({
-      mensaje: `Éxito. Se promovieron ${resultado.conteo} alumnos al periodo ${resultado.periodoNuevo}.`,
+    res.status(200).json({
+      mensaje:
+        "Periodo cerrado correctamente. Estudiantes promovidos y alumnos de 6to semestre egresados.",
     });
   } catch (error) {
-    console.error("DETALLE DEL ERROR:", error);
-    res
-      .status(500)
-      .json({ error: error.message || "Error interno al procesar promoción" });
+    console.error("Error al cerrar periodo:", error);
+    res.status(500).json({ error: "Error interno al cerrar el periodo." });
   }
 };
 
