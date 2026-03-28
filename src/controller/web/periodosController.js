@@ -71,64 +71,93 @@ const setPeriodoActual = async (req, res) => {
 
 const cerrarPeriodoYPromover = async (req, res) => {
   const { id } = req.params;
-  const idPeriodo = parseInt(id);
+  const idPeriodoCerrar = parseInt(id);
 
   try {
-    await prisma.$transaction(async (tx) => {
-      // 1. Desactivar periodo actual
-      await tx.periodo.update({
-        where: { idPeriodo: idPeriodo },
-        data: { activo: false },
-      });
+    const resultado = await prisma.$transaction(
+      async (tx) => {
+        // 1. Buscamos el periodo que acaba de quedar activo
+        const periodoDestino = await tx.periodo.findFirst({
+          where: { activo: true },
+        });
 
-      // 2. Egresar a los de 6to (Esto está bien)
-      const estudiantesSexto = await tx.estudiante.findMany({
-        where: { semestre: 6 },
-        select: { usuarioId: true },
-      });
-      const idsUsuariosSexto = estudiantesSexto.map((e) => e.usuarioId);
-      if (idsUsuariosSexto.length > 0) {
-        await tx.usuario.updateMany({
-          where: { idUsuario: { in: idsUsuariosSexto } },
+        if (!periodoDestino) {
+          throw new Error(
+            "Primero debes crear y activar el nuevo periodo (el siguiente semestre).",
+          );
+        }
+
+        // 2. Desactivamos el periodo viejo
+        await tx.periodo.update({
+          where: { idPeriodo: idPeriodoCerrar },
           data: { activo: false },
         });
-      }
 
-      // 3. PROMOCIÓN INTELIGENTE (1ro A -> 2do A)
-      // Primero obtenemos a los estudiantes que van a subir
-      const estudiantesAPromover = await tx.estudiante.findMany({
-        where: { semestre: { lt: 6 }, usuario: { activo: true } },
-        include: { grupo: true },
-      });
+        // 3. Egresar 6to semestre (Desactivar usuarios)
+        const alumnosSexto = await tx.estudiante.findMany({
+          where: { semestre: 6, usuario: { activo: true } },
+          select: { usuarioId: true },
+        });
 
-      for (const estudiante of estudiantesAPromover) {
-        if (estudiante.grupo) {
-          // Buscamos el grupo del siguiente semestre con el mismo nombre (Ej: "A")
-          const siguienteGrupo = await tx.grupo.findFirst({
-            where: {
-              nombre: estudiante.grupo.nombre, // Mismo nombre (A, B, C...)
-              grado: estudiante.semestre + 1, // Grado superior
-              especialidadId: estudiante.grupo.especialidadId, // Misma especialidad
-            },
+        if (alumnosSexto.length > 0) {
+          await tx.usuario.updateMany({
+            where: { idUsuario: { in: alumnosSexto.map((a) => a.usuarioId) } },
+            data: { activo: false },
           });
+        }
 
-          // Actualizamos al estudiante
-          await tx.estudiante.update({
+        // 4. Promoción Inteligente (Optimizado)
+        const estudiantes = await tx.estudiante.findMany({
+          where: { semestre: { lt: 6 }, usuario: { activo: true } },
+          include: { grupo: true },
+        });
+
+        // Usamos Promise.all para que sea más rápido y no sature la transacción
+        const promesasPromocion = estudiantes.map(async (estudiante) => {
+          let nuevoGrupoId = null;
+
+          if (estudiante.grupo) {
+            // Buscamos el grupo par en el periodo destino (Ej: de 1A a 2A)
+            const grupoPar = await tx.grupo.findFirst({
+              where: {
+                nombre: estudiante.grupo.nombre,
+                grado: estudiante.semestre + 1,
+                especialidadId: estudiante.grupo.especialidadId,
+                periodoId: periodoDestino.idPeriodo,
+              },
+            });
+            if (grupoPar) nuevoGrupoId = grupoPar.idGrupo;
+          }
+
+          return tx.estudiante.update({
             where: { idEstudiante: estudiante.idEstudiante },
             data: {
               semestre: { increment: 1 },
-              grupoId: siguienteGrupo ? siguienteGrupo.idGrupo : null,
-              // Si no existe el grupo de 2A, lo deja en null, pero no lo borra a ciegas
+              grupoId: nuevoGrupoId, // Si no hay grupo par, queda en null pero sube de semestre
             },
           });
-        }
-      }
-    });
+        });
 
-    res.status(200).json({ mensaje: "Promoción completada con éxito." });
+        await Promise.all(promesasPromocion);
+
+        return {
+          conteo: estudiantes.length,
+          periodoNuevo: periodoDestino.nombre,
+        };
+      },
+      {
+        timeout: 10000, // Aumentamos el tiempo de espera de la transacción a 10 segundos
+      },
+    );
+
+    res.json({
+      mensaje: `Éxito. Se promovieron ${resultado.conteo} alumnos al periodo ${resultado.periodoNuevo}.`,
+    });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Error en la promoción." });
+    console.error("DETALLE DEL ERROR:", error);
+    res
+      .status(500)
+      .json({ error: error.message || "Error interno al procesar promoción" });
   }
 };
 
