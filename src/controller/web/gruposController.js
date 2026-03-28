@@ -65,8 +65,6 @@ const crearGrupo = async (req, res) => {
 const getGrupos = async (req, res) => {
   try {
     const grupos = await prisma.grupo.findMany({
-      // ¡AQUÍ ESTÁ EL CAMBIO IMPORTANTE!
-      // Quitamos el 'where' para que traiga TODOS los grupos sin importar el periodo.
       include: {
         especialidad: {
           select: { nombre: true, codigo: true },

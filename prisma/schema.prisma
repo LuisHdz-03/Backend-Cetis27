@@ -74,6 +74,9 @@ model Estudiante {
   tutorId Int?
   tutor   Tutor? @relation(fields: [tutorId], references: [idTutor])
 
+  especialidadId Int?
+  especialidad   Especialidad? @relation(fields: [especialidadId], references: [idEspecialidad])
+
   acceso Aceesos[]
   nota   Nota[]
 
@@ -106,6 +109,7 @@ model Especialidad {
   grupos   Grupo[]
   materias Materia[]
   docentes Docente[]
+  estudiantes Estudiante[]
 
   @@map("especialidades")
 }

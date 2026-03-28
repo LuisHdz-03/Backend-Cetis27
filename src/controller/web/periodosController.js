@@ -33,11 +33,11 @@ const getPeriodos = async (req, res) => {
 
     let whereClause = {};
     if (activos === "true") {
-      whereClause.activo = true; 
+      whereClause.activo = true;
     }
 
     const periodos = await prisma.periodo.findMany({
-      where: whereClause, 
+      where: whereClause,
       orderBy: { fechaInicio: "desc" },
     });
 
@@ -73,25 +73,20 @@ const cerrarPeriodoYPromover = async (req, res) => {
   const { id } = req.params;
   const idPeriodo = parseInt(id);
 
-  if (isNaN(idPeriodo)) {
-    return res.status(400).json({ error: "ID de periodo inválido" });
-  }
-
   try {
     await prisma.$transaction(async (tx) => {
-      // 1. Desactivar el periodo actual
+      // 1. Desactivar periodo actual
       await tx.periodo.update({
         where: { idPeriodo: idPeriodo },
         data: { activo: false },
       });
 
+      // 2. Egresar a los de 6to (Esto está bien)
       const estudiantesSexto = await tx.estudiante.findMany({
         where: { semestre: 6 },
         select: { usuarioId: true },
       });
-
       const idsUsuariosSexto = estudiantesSexto.map((e) => e.usuarioId);
-
       if (idsUsuariosSexto.length > 0) {
         await tx.usuario.updateMany({
           where: { idUsuario: { in: idsUsuariosSexto } },
@@ -99,25 +94,41 @@ const cerrarPeriodoYPromover = async (req, res) => {
         });
       }
 
-      await tx.estudiante.updateMany({
-        where: {
-          semestre: { lt: 6 },
-          usuario: { activo: true },
-        },
-        data: {
-          semestre: { increment: 1 },
-          grupoId: null,
-        },
+      // 3. PROMOCIÓN INTELIGENTE (1ro A -> 2do A)
+      // Primero obtenemos a los estudiantes que van a subir
+      const estudiantesAPromover = await tx.estudiante.findMany({
+        where: { semestre: { lt: 6 }, usuario: { activo: true } },
+        include: { grupo: true },
       });
+
+      for (const estudiante of estudiantesAPromover) {
+        if (estudiante.grupo) {
+          // Buscamos el grupo del siguiente semestre con el mismo nombre (Ej: "A")
+          const siguienteGrupo = await tx.grupo.findFirst({
+            where: {
+              nombre: estudiante.grupo.nombre, // Mismo nombre (A, B, C...)
+              grado: estudiante.semestre + 1, // Grado superior
+              especialidadId: estudiante.grupo.especialidadId, // Misma especialidad
+            },
+          });
+
+          // Actualizamos al estudiante
+          await tx.estudiante.update({
+            where: { idEstudiante: estudiante.idEstudiante },
+            data: {
+              semestre: { increment: 1 },
+              grupoId: siguienteGrupo ? siguienteGrupo.idGrupo : null,
+              // Si no existe el grupo de 2A, lo deja en null, pero no lo borra a ciegas
+            },
+          });
+        }
+      }
     });
 
-    res.status(200).json({
-      mensaje:
-        "Periodo cerrado correctamente. Estudiantes promovidos y alumnos de 6to semestre egresados.",
-    });
+    res.status(200).json({ mensaje: "Promoción completada con éxito." });
   } catch (error) {
-    console.error("Error al cerrar periodo:", error);
-    res.status(500).json({ error: "Error interno al cerrar el periodo." });
+    console.error(error);
+    res.status(500).json({ error: "Error en la promoción." });
   }
 };
 
