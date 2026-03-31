@@ -60,7 +60,7 @@ model Estudiante {
   grupo                     Grupo?       @relation(fields: [grupoId], references: [idGrupo])
   tutor                     Tutor?       @relation(fields: [tutorId], references: [idTutor])
   usuario                   Usuario      @relation(fields: [usuarioId], references: [idUsuario])
-  notas                     notas[]
+  // SE ELIMINÓ: notas
   reportes                  Reporte[]    @relation("ReporteAlumno")
 
   @@map("estudiantes")
@@ -74,13 +74,13 @@ model Periodo {
   fechaFin    DateTime
   activo      Boolean  @default(true)
   clase       Clase[]
-  grupos      Grupo[]
+  // SE ELIMINÓ: grupos Grupo[]
 
   @@map("periodos")
 }
 
 model Especialidad {
-  idEspecialidad Int       @id @default(autoincrement())
+  idEspecialidad Int         @id @default(autoincrement())
   nombre         String
   codigo         String
   descripcion    String?
@@ -111,12 +111,12 @@ model Grupo {
   grado          Int
   turno          Turno
   aula           String?
-  periodoId      Int
+  // SE ELIMINÓ: periodoId
   especialidadId Int
   clases         Clase[]
   estudiantes    Estudiante[]
   especialidad   Especialidad @relation(fields: [especialidadId], references: [idEspecialidad])
-  periodos       Periodo      @relation(fields: [periodoId], references: [idPeriodo])
+  // SE ELIMINÓ: periodos Periodo
 
   @@map("grupos")
 }
@@ -149,7 +149,7 @@ model Clase {
   grupo       Grupo        @relation(fields: [grupoId], references: [idGrupo])
   materias    Materia      @relation(fields: [materiaId], references: [idMateria])
   periodo     Periodo      @relation(fields: [periodoId], references: [idPeriodo])
-  notas       notas[]
+  // SE ELIMINÓ: notas
 
   @@map("clases")
 }
@@ -167,19 +167,19 @@ model Asistencia {
 }
 
 model Reporte {
-  idReporte       Int        @id @default(autoincrement())
+  idReporte       Int         @id @default(autoincrement())
   titulo          String
   descripcion     String
   tipoIncidencia  String
   nivel           String
-  fecha           DateTime   @default(now())
-  estatus         String     @default("PENDIENTE")
+  fecha           DateTime    @default(now())
+  estatus         String      @default("PENDIENTE")
   accionesTomadas String?
   alumnoId        Int
   docenteId       Int?
   reportadoPor    String?
-  alumno          Estudiante @relation("ReporteAlumno", fields: [alumnoId], references: [idEstudiante])
-  docente         Docente?   @relation("ReportadoPor", fields: [docenteId], references: [idDocente])
+  alumno          Estudiante  @relation("ReporteAlumno", fields: [alumnoId], references: [idEstudiante])
+  docente         Docente?    @relation("ReportadoPor", fields: [docenteId], references: [idDocente])
 
   @@map("reportes")
 }
@@ -214,30 +214,6 @@ model Administrativo {
   usuario          Usuario @relation(fields: [usuarioId], references: [idUsuario])
 
   @@map("administrativos")
-}
-
-model notas {
-  idNota           Int              @id @default(autoincrement())
-  valor            Float
-  faltas           Int              @default(0)
-  fechaCaptura     DateTime         @default(now())
-  alumnoId         Int
-  claseId          Int
-  tipoEvaluacionId Int
-  estudiantes      Estudiante       @relation(fields: [alumnoId], references: [idEstudiante])
-  clases           Clase            @relation(fields: [claseId], references: [idClase])
-  tipos_evaluacion tipos_evaluacion @relation(fields: [tipoEvaluacionId], references: [idTipo])
-
-  @@unique([alumnoId, claseId, tipoEvaluacionId])
-}
-
-model tipos_evaluacion {
-  idTipo Int     @id @default(autoincrement())
-  nombre String
-  orden  Int
-  peso   Float   @default(1.0)
-  activo Boolean @default(true)
-  notas  notas[]
 }
 
 enum Turno {
