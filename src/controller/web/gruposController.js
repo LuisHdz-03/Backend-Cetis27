@@ -8,16 +8,16 @@ const crearGrupo = async (req, res) => {
       grado,
       turno,
       aula,
-      periodoId,
+      periodoId, // Este lo conservamos SOLO para crear las clases, no el grupo
       especialidadId,
       docenteId,
       materiasIds,
     } = req.body;
 
-    if (!periodoId || !especialidadId) {
-      return res
-        .status(400)
-        .json({ error: "Faltan IDs de Periodo o Especialidad" });
+    // Ya no exigimos periodoId para el grupo, solo especialidadId.
+    // (A menos que quieras hacerlo obligatorio para crear las clases iniciales)
+    if (!especialidadId) {
+      return res.status(400).json({ error: "Falta ID de la Especialidad" });
     }
 
     const nuevoGrupo = await prisma.$transaction(async (tx) => {
@@ -27,8 +27,8 @@ const crearGrupo = async (req, res) => {
           grado: parseInt(grado),
           turno,
           aula,
-          periodoId: parseInt(periodoId),
           especialidadId: parseInt(especialidadId),
+          // SE ELIMINÓ: periodoId
         },
       });
 
@@ -36,7 +36,8 @@ const crearGrupo = async (req, res) => {
         docenteId &&
         materiasIds &&
         Array.isArray(materiasIds) &&
-        materiasIds.length > 0
+        materiasIds.length > 0 &&
+        periodoId // Ahora nos aseguramos que haya un periodoId para crear la clase
       ) {
         const clasesData = materiasIds.map((materiaId) => ({
           grupoId: grupoCreado.idGrupo,
@@ -69,9 +70,7 @@ const getGrupos = async (req, res) => {
         especialidad: {
           select: { nombre: true, codigo: true },
         },
-        periodo: {
-          select: { nombre: true, activo: true },
-        },
+        // SE ELIMINÓ: include de periodo
         clases: {
           include: {
             materias: true,
@@ -79,6 +78,10 @@ const getGrupos = async (req, res) => {
               include: {
                 usuario: { select: { nombre: true, apellidoPaterno: true } },
               },
+            },
+            periodo: {
+              // Si quieres seguir viendo de qué periodo es cada clase, se incluye aquí
+              select: { nombre: true, activo: true },
             },
           },
         },
@@ -116,10 +119,11 @@ const getGrupoById = async (req, res) => {
           orderBy: { usuario: { apellidoPaterno: "asc" } },
         },
         especialidad: true,
-        periodo: true,
+        // SE ELIMINÓ: periodo: true
         clases: {
           include: {
             materias: true,
+            periodo: true, // Incluido aquí en vez de en el grupo
             docente: {
               include: {
                 usuario: { select: { nombre: true, apellidoPaterno: true } },
@@ -139,7 +143,8 @@ const getGrupoById = async (req, res) => {
 const actualizarGrupo = async (req, res) => {
   try {
     const { id } = req.params;
-    const { nombre, grado, turno, aula, periodoId, especialidadId } = req.body;
+    // Ya no extraemos periodoId
+    const { nombre, grado, turno, aula, especialidadId } = req.body;
 
     const grupoId = parseInt(id);
 
@@ -177,26 +182,14 @@ const actualizarGrupo = async (req, res) => {
       }
     }
 
-    if (periodoId) {
-      const periodoExiste = await prisma.periodo.findUnique({
-        where: { idPeriodo: parseInt(periodoId) },
-      });
-
-      if (!periodoExiste) {
-        return res.status(400).json({
-          error: `El periodo con ID ${periodoId} no existe`,
-        });
-      }
-    }
-
     const dataActualizar = {};
     if (nombre !== undefined) dataActualizar.nombre = nombre.trim();
     if (grado !== undefined) dataActualizar.grado = parseInt(grado);
     if (turno !== undefined) dataActualizar.turno = turno.trim().toUpperCase();
     if (aula !== undefined) dataActualizar.aula = aula ? aula.trim() : null;
-    if (periodoId !== undefined) dataActualizar.periodoId = parseInt(periodoId);
     if (especialidadId !== undefined)
       dataActualizar.especialidadId = parseInt(especialidadId);
+    // SE ELIMINÓ: actualización de periodoId
 
     const grupoActualizado = await prisma.grupo.update({
       where: { idGrupo: grupoId },
@@ -245,15 +238,6 @@ const cargarGruposMasivos = async (req, res) => {
     const errores = [];
     const datosInsertados = [];
 
-    const periodoActivo = await prisma.periodo.findFirst({
-      where: { activo: true },
-    });
-    if (!periodoActivo) {
-      return res
-        .status(400)
-        .json({ error: "No hay un periodo activo. Crea uno primero." });
-    }
-
     const turnosValidos = ["MATUTINO", "VESPERTINO", "MIXTO"];
 
     for (const fila of datosExcel) {
@@ -262,7 +246,6 @@ const cargarGruposMasivos = async (req, res) => {
       const turno = fila["TURNO"];
       const aula = fila["AULA"];
       const especialidadNombre = fila["ESPECIALIDAD"];
-      const periodoNombre = fila["PERIODO"];
 
       if (!nombre || !grado || !turno || !especialidadNombre) {
         errores.push({
@@ -299,33 +282,12 @@ const cargarGruposMasivos = async (req, res) => {
           continue;
         }
 
-        let periodoFinal = periodoActivo.idPeriodo;
-        if (periodoNombre) {
-          const periodoExiste = await prisma.periodo.findFirst({
-            where: {
-              nombre: {
-                equals: String(periodoNombre).trim(),
-                mode: "insensitive",
-              },
-            },
-          });
-
-          if (!periodoExiste) {
-            errores.push({
-              registro: nombre,
-              error: `El periodo "${periodoNombre}" no existe`,
-            });
-            continue;
-          }
-          periodoFinal = periodoExiste.idPeriodo;
-        }
-
+        // Buscamos sin periodoId
         const grupoExistente = await prisma.grupo.findFirst({
           where: {
             nombre: String(nombre).trim(),
             grado: parseInt(grado),
             especialidadId: especialidadExiste.idEspecialidad,
-            periodoId: periodoFinal,
           },
         });
 
@@ -351,7 +313,6 @@ const cargarGruposMasivos = async (req, res) => {
               turno: turnoNormalizado,
               aula: aula ? String(aula).trim() : null,
               especialidadId: especialidadExiste.idEspecialidad,
-              periodoId: periodoFinal,
             },
           });
           datosInsertados.push(nuevoGrupo.nombre);
