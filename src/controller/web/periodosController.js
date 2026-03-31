@@ -108,6 +108,11 @@ const cerrarPeriodoYPromover = async (req, res) => {
         },
       });
 
+      await tx.grupo.updateMany({
+        where: { grado: 6 },
+        data: { activo: false },
+      });
+
       const gruposPromover = await tx.grupo.findMany({
         where: {
           grado: { lt: 6 },

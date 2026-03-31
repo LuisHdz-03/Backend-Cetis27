@@ -66,11 +66,13 @@ const crearGrupo = async (req, res) => {
 const getGrupos = async (req, res) => {
   try {
     const grupos = await prisma.grupo.findMany({
+      where: {
+        activo: true,
+      },
       include: {
         especialidad: {
           select: { nombre: true, codigo: true },
         },
-        // SE ELIMINÓ: include de periodo
         clases: {
           include: {
             materias: true,
@@ -80,7 +82,6 @@ const getGrupos = async (req, res) => {
               },
             },
             periodo: {
-              // Si quieres seguir viendo de qué periodo es cada clase, se incluye aquí
               select: { nombre: true, activo: true },
             },
           },
