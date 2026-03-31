@@ -111,12 +111,11 @@ model Grupo {
   grado          Int
   turno          Turno
   aula           String?
-  // SE ELIMINÓ: periodoId
+  activo         Boolean      @default(true) 
   especialidadId Int
   clases         Clase[]
   estudiantes    Estudiante[]
   especialidad   Especialidad @relation(fields: [especialidadId], references: [idEspecialidad])
-  // SE ELIMINÓ: periodos Periodo
 
   @@map("grupos")
 }
@@ -149,7 +148,7 @@ model Clase {
   grupo       Grupo        @relation(fields: [grupoId], references: [idGrupo])
   materias    Materia      @relation(fields: [materiaId], references: [idMateria])
   periodo     Periodo      @relation(fields: [periodoId], references: [idPeriodo])
-  // SE ELIMINÓ: notas
+
 
   @@map("clases")
 }
