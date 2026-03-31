@@ -79,13 +79,11 @@ const cerrarPeriodoYPromover = async (req, res) => {
 
   try {
     await prisma.$transaction(async (tx) => {
-      // 1. Desactivar el periodo actual
       await tx.periodo.update({
         where: { idPeriodo: idPeriodo },
         data: { activo: false },
       });
 
-      // 2. Buscar alumnos de 6to semestre y egresarlos (desactivarlos)
       const estudiantesSexto = await tx.estudiante.findMany({
         where: { semestre: 6 },
         select: { usuarioId: true },
@@ -100,7 +98,6 @@ const cerrarPeriodoYPromover = async (req, res) => {
         });
       }
 
-      // 3. Promover alumnos de 1ro a 5to semestre
       await tx.estudiante.updateMany({
         where: {
           semestre: { lt: 6 },
@@ -108,20 +105,16 @@ const cerrarPeriodoYPromover = async (req, res) => {
         },
         data: {
           semestre: { increment: 1 },
-          // ELIMINAMOS grupoId: null PARA QUE SE QUEDEN EN SU GRUPO Y SU ESPECIALIDAD
         },
       });
 
-      // 4. Promover los Grupos (Subir grado y cambiar nombre de 1A a 2A)
       const gruposPromover = await tx.grupo.findMany({
         where: {
-          periodoId: idPeriodo, // Afectar solo a los grupos de este periodo
-          grado: { lt: 6 }, // Solo grupos de 1ro a 5to
+          grado: { lt: 6 },
         },
       });
 
       for (const grupo of gruposPromover) {
-        // Busca el primer número en el nombre del grupo y le suma 1 (Ej: "1A" pasa a "2A", "3B Contabilidad" pasa a "4B Contabilidad")
         const nuevoNombre = grupo.nombre.replace(
           /\d+/,
           (match) => parseInt(match) + 1,
