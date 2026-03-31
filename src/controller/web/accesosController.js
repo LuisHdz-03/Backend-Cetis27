@@ -33,7 +33,8 @@ const registrarAcceso = async (req, res) => {
       return res.status(404).json({ mensaje: "Matricula no encontrada" });
     }
 
-    const ultimoAcceso = await prisma.aceesos.findFirst({
+    // CORREGIDO: accesos
+    const ultimoAcceso = await prisma.accesos.findFirst({
       where: { alumnoId: alumno.idEstudiante },
       orderBy: { fechaHora: "desc" },
     });
@@ -67,7 +68,8 @@ const registrarAcceso = async (req, res) => {
       }
     }
 
-    const nuevoRegistro = await prisma.aceesos.create({
+    // CORREGIDO: accesos
+    const nuevoRegistro = await prisma.accesos.create({
       data: {
         tipo: nuevoTipo,
         alumnoId: alumno.idEstudiante,
@@ -89,7 +91,8 @@ const registrarAcceso = async (req, res) => {
 
 const getAccesos = async (req, res) => {
   try {
-    const accesos = await prisma.aceesos.findMany({
+    // CORREGIDO: accesos
+    const accesos = await prisma.accesos.findMany({
       include: {
         alumno: {
           select: {
