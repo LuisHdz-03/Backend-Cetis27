@@ -160,6 +160,59 @@ const actualizarGrupo = async (req, res) => {
       return res.status(400).json({ error: "ID de grupo inválido" });
     }
 
+    if (grado !== undefined && isNaN(parseInt(grado, 10))) {
+      return res
+        .status(400)
+        .json({ error: "El grado debe ser un número válido" });
+    }
+
+    if (especialidadId !== undefined) {
+      if (especialidadId === null || isNaN(parseInt(especialidadId, 10))) {
+        return res
+          .status(400)
+          .json({ error: "El especialidadId es inválido o no puede ser nulo" });
+      }
+    }
+
+    let parsedDocenteId = null;
+    if (docenteId !== undefined && docenteId !== null) {
+      parsedDocenteId = parseInt(docenteId, 10);
+      if (isNaN(parsedDocenteId))
+        return res.status(400).json({ error: "docenteId inválido" });
+    }
+
+    let parsedPeriodoId = null;
+    if (periodoId !== undefined && periodoId !== null) {
+      parsedPeriodoId = parseInt(periodoId, 10);
+      if (isNaN(parsedPeriodoId))
+        return res.status(400).json({ error: "periodoId inválido" });
+    }
+
+    let parsedMateriasIds = [];
+    if (materiasIds !== undefined) {
+      if (!Array.isArray(materiasIds)) {
+        return res
+          .status(400)
+          .json({ error: "materiasIds debe ser un arreglo" });
+      }
+      parsedMateriasIds = materiasIds.map((m) => parseInt(m, 10));
+      if (parsedMateriasIds.some(isNaN)) {
+        return res
+          .status(400)
+          .json({ error: "Uno o más IDs en materiasIds no son válidos" });
+      }
+
+      if (
+        parsedMateriasIds.length > 0 &&
+        (!parsedDocenteId || !parsedPeriodoId)
+      ) {
+        return res.status(400).json({
+          error:
+            "Para asignar materias, debes enviar un docenteId y periodoId válidos.",
+        });
+      }
+    }
+
     const grupoExiste = await prisma.grupo.findUnique({
       where: { idGrupo: grupoId },
     });
@@ -172,7 +225,7 @@ const actualizarGrupo = async (req, res) => {
       const turnoNormalizado = String(turno).trim().toUpperCase();
       if (!turnosValidos.includes(turnoNormalizado)) {
         return res.status(400).json({
-          error: `Turno inválido: ${turno}. Debe ser MATUTINO, VESPERTINO o MIXTO`,
+          error: `Turno inválido. Debe ser MATUTINO, VESPERTINO o MIXTO`,
         });
       }
     }
@@ -182,9 +235,7 @@ const actualizarGrupo = async (req, res) => {
         where: { idEspecialidad: parseInt(especialidadId, 10) },
       });
       if (!esp) {
-        return res.status(400).json({
-          error: `La especialidad con ID ${especialidadId} no existe`,
-        });
+        return res.status(400).json({ error: "La especialidad no existe" });
       }
     }
 
@@ -195,10 +246,8 @@ const actualizarGrupo = async (req, res) => {
       dataActualizar.turno = String(turno).trim().toUpperCase();
     if (aula !== undefined)
       dataActualizar.aula = aula ? String(aula).trim() : null;
-    if (especialidadId !== undefined) {
-      dataActualizar.especialidadId =
-        especialidadId !== null ? parseInt(especialidadId, 10) : null;
-    }
+    if (especialidadId !== undefined)
+      dataActualizar.especialidadId = parseInt(especialidadId, 10);
 
     const grupoActualizado = await prisma.$transaction(async (tx) => {
       const grupo = await tx.grupo.update({
@@ -206,27 +255,17 @@ const actualizarGrupo = async (req, res) => {
         data: dataActualizar,
       });
 
-      const traeMaterias = Array.isArray(materiasIds);
-      const traeDocente = docenteId !== undefined && docenteId !== null;
-      const traePeriodo = periodoId !== undefined && periodoId !== null;
-
-      // Si viene información académica en el request, sincronizamos clases
-      if (traeMaterias || traeDocente || traePeriodo) {
+      if (materiasIds !== undefined && Array.isArray(materiasIds)) {
+        // Limpiamos las clases actuales del grupo
         await tx.clase.deleteMany({ where: { grupoId } });
 
-        if (
-          traeMaterias &&
-          materiasIds.length > 0 &&
-          traeDocente &&
-          traePeriodo
-        ) {
-          const clasesData = materiasIds.map((materiaId) => ({
+        if (parsedMateriasIds.length > 0) {
+          const clasesData = parsedMateriasIds.map((materiaId) => ({
             grupoId,
-            docenteId: parseInt(docenteId, 10),
-            materiaId: parseInt(materiaId, 10),
-            periodoId: parseInt(periodoId, 10),
+            docenteId: parsedDocenteId,
+            materiaId: materiaId,
+            periodoId: parsedPeriodoId,
           }));
-
           await tx.clase.createMany({ data: clasesData });
         }
       }
