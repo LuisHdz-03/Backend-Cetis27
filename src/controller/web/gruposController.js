@@ -144,11 +144,18 @@ const getGrupoById = async (req, res) => {
 const actualizarGrupo = async (req, res) => {
   try {
     const { id } = req.params;
-    // Ya no extraemos periodoId
-    const { nombre, grado, turno, aula, especialidadId } = req.body;
+    const {
+      nombre,
+      grado,
+      turno,
+      aula,
+      especialidadId,
+      periodoId,
+      docenteId,
+      materiasIds,
+    } = req.body;
 
-    const grupoId = parseInt(id);
-
+    const grupoId = parseInt(id, 10);
     if (isNaN(grupoId)) {
       return res.status(400).json({ error: "ID de grupo inválido" });
     }
@@ -156,14 +163,13 @@ const actualizarGrupo = async (req, res) => {
     const grupoExiste = await prisma.grupo.findUnique({
       where: { idGrupo: grupoId },
     });
-
     if (!grupoExiste) {
       return res.status(404).json({ error: "Grupo no encontrado" });
     }
 
     const turnosValidos = ["MATUTINO", "VESPERTINO", "MIXTO"];
-    if (turno) {
-      const turnoNormalizado = turno.trim().toUpperCase();
+    if (turno !== undefined) {
+      const turnoNormalizado = String(turno).trim().toUpperCase();
       if (!turnosValidos.includes(turnoNormalizado)) {
         return res.status(400).json({
           error: `Turno inválido: ${turno}. Debe ser MATUTINO, VESPERTINO o MIXTO`,
@@ -171,12 +177,11 @@ const actualizarGrupo = async (req, res) => {
       }
     }
 
-    if (especialidadId) {
-      const especialidadExiste = await prisma.especialidad.findUnique({
-        where: { idEspecialidad: parseInt(especialidadId) },
+    if (especialidadId !== undefined && especialidadId !== null) {
+      const esp = await prisma.especialidad.findUnique({
+        where: { idEspecialidad: parseInt(especialidadId, 10) },
       });
-
-      if (!especialidadExiste) {
+      if (!esp) {
         return res.status(400).json({
           error: `La especialidad con ID ${especialidadId} no existe`,
         });
@@ -184,26 +189,58 @@ const actualizarGrupo = async (req, res) => {
     }
 
     const dataActualizar = {};
-    if (nombre !== undefined) dataActualizar.nombre = nombre.trim();
-    if (grado !== undefined) dataActualizar.grado = parseInt(grado);
-    if (turno !== undefined) dataActualizar.turno = turno.trim().toUpperCase();
-    if (aula !== undefined) dataActualizar.aula = aula ? aula.trim() : null;
-    if (especialidadId !== undefined)
-      dataActualizar.especialidadId = parseInt(especialidadId);
-    // SE ELIMINÓ: actualización de periodoId
+    if (nombre !== undefined) dataActualizar.nombre = String(nombre).trim();
+    if (grado !== undefined) dataActualizar.grado = parseInt(grado, 10);
+    if (turno !== undefined)
+      dataActualizar.turno = String(turno).trim().toUpperCase();
+    if (aula !== undefined)
+      dataActualizar.aula = aula ? String(aula).trim() : null;
+    if (especialidadId !== undefined) {
+      dataActualizar.especialidadId =
+        especialidadId !== null ? parseInt(especialidadId, 10) : null;
+    }
 
-    const grupoActualizado = await prisma.grupo.update({
-      where: { idGrupo: grupoId },
-      data: dataActualizar,
+    const grupoActualizado = await prisma.$transaction(async (tx) => {
+      const grupo = await tx.grupo.update({
+        where: { idGrupo: grupoId },
+        data: dataActualizar,
+      });
+
+      const traeMaterias = Array.isArray(materiasIds);
+      const traeDocente = docenteId !== undefined && docenteId !== null;
+      const traePeriodo = periodoId !== undefined && periodoId !== null;
+
+      // Si viene información académica en el request, sincronizamos clases
+      if (traeMaterias || traeDocente || traePeriodo) {
+        await tx.clase.deleteMany({ where: { grupoId } });
+
+        if (
+          traeMaterias &&
+          materiasIds.length > 0 &&
+          traeDocente &&
+          traePeriodo
+        ) {
+          const clasesData = materiasIds.map((materiaId) => ({
+            grupoId,
+            docenteId: parseInt(docenteId, 10),
+            materiaId: parseInt(materiaId, 10),
+            periodoId: parseInt(periodoId, 10),
+          }));
+
+          await tx.clase.createMany({ data: clasesData });
+        }
+      }
+
+      return grupo;
     });
 
-    res.json({
+    return res.json({
       mensaje: "Grupo actualizado exitosamente",
       grupo: grupoActualizado,
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: "Error al actualizar el grupo" });
+    return res.status(500).json({ error: "Error al actualizar el grupo" });
   }
 };
 
