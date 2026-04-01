@@ -13,16 +13,34 @@ const crearReporte = async (req, res) => {
       reportadoPor,
     } = req.body;
 
-    if (!titulo || !descripcion || !estudianteId) {
+    const idEstudianteNumero = parseInt(estudianteId, 10);
+
+    if (
+      !titulo ||
+      !descripcion ||
+      !idEstudianteNumero ||
+      isNaN(idEstudianteNumero)
+    ) {
       return res.status(400).json({
         mensaje:
           "Faltan datos obligatorios (titulo, descripcion o estudianteId)",
       });
     }
 
+    const alumnoExiste = await prisma.estudiante.findUnique({
+      where: { idEstudiante: idEstudianteNumero },
+      select: { idEstudiante: true },
+    });
+
+    if (!alumnoExiste) {
+      return res.status(400).json({
+        mensaje: `El estudiante con id ${idEstudianteNumero} no existe`,
+      });
+    }
+
     const dataReporte = {
-      titulo: titulo,
-      descripcion: descripcion,
+      titulo,
+      descripcion,
       tipoIncidencia: tipo || "DISCIPLINARIO",
       nivel: gravedad || "MEDIA",
       accionesTomadas: acciones || "Pendiente de revisión",
@@ -31,9 +49,14 @@ const crearReporte = async (req, res) => {
       alumnoId: idEstudianteNumero,
     };
 
-    if (docenteId) {
+    if (docenteId !== undefined && docenteId !== null && docenteId !== "") {
+      const idDocenteNumero = parseInt(docenteId, 10);
+      if (isNaN(idDocenteNumero)) {
+        return res.status(400).json({ mensaje: "docenteId inválido" });
+      }
+
       dataReporte.docente = {
-        connect: { idDocente: parseInt(docenteId) },
+        connect: { idDocente: idDocenteNumero },
       };
     }
 
@@ -41,13 +64,15 @@ const crearReporte = async (req, res) => {
       data: dataReporte,
     });
 
-    res.status(201).json({
+    return res.status(201).json({
       mensaje: "Reporte generado y guardado correctamente",
       reporte: nuevoReporte,
     });
   } catch (error) {
     console.error("Error al crear el reporte en la BD:", error);
-    res.status(500).json({ error: "Error interno al crear el reporte" });
+    return res.status(500).json({
+      error: "Error interno al crear el reporte",
+    });
   }
 };
 
