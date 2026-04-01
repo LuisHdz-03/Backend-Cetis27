@@ -313,6 +313,11 @@ const actualizarEstudiante = async (req, res) => {
   try {
     const { id } = req.params;
     const {
+      nombre,
+      apellidoPaterno,
+      apellidoMaterno,
+      curp,
+      matricula,
       credencialFechaEmision,
       credencialFechaExpiracion,
       telefono,
@@ -334,11 +339,8 @@ const actualizarEstudiante = async (req, res) => {
     const estudianteActualizado = await prisma.$transaction(async (tx) => {
       let idTutorAsignado = estudianteExistente.tutorId;
 
-      // 1. LÓGICA DEL TUTOR (SI ENVIARON DATOS)
       if (tutor && tutor.nombre) {
-        // Validamos que al menos venga el nombre
         if (estudianteExistente.tutorId) {
-          // Si ya existe, lo actualizamos
           await tx.tutor.update({
             where: { idTutor: estudianteExistente.tutorId },
             data: {
@@ -352,7 +354,6 @@ const actualizarEstudiante = async (req, res) => {
             },
           });
         } else {
-          // Si NO existe, creamos uno nuevo y lo relacionamos
           const nuevoTutor = await tx.tutor.create({
             data: {
               nombre: tutor.nombre,
@@ -368,8 +369,10 @@ const actualizarEstudiante = async (req, res) => {
         }
       }
 
-      // 2. LÓGICA DEL ESTUDIANTE
       const dataEstudiante = {};
+
+      if (matricula !== undefined) dataEstudiante.matricula = matricula;
+
       if (credencialFechaEmision) {
         dataEstudiante.credencialFechaEmision = new Date(
           credencialFechaEmision,
@@ -387,7 +390,6 @@ const actualizarEstudiante = async (req, res) => {
         dataEstudiante.grupoId = grupoId === null ? null : parseInt(grupoId);
       }
 
-      // Si creamos un tutor nuevo, lo conectamos
       if (idTutorAsignado !== estudianteExistente.tutorId) {
         dataEstudiante.tutorId = idTutorAsignado;
       }
@@ -399,8 +401,15 @@ const actualizarEstudiante = async (req, res) => {
         });
       }
 
-      // 3. LÓGICA DEL USUARIO
       const dataUsuario = {};
+
+      if (nombre !== undefined) dataUsuario.nombre = nombre;
+      if (apellidoPaterno !== undefined)
+        dataUsuario.apellidoPaterno = apellidoPaterno;
+      if (apellidoMaterno !== undefined)
+        dataUsuario.apellidoMaterno = apellidoMaterno;
+      if (curp !== undefined) dataUsuario.curp = curp;
+
       if (telefono !== undefined) dataUsuario.telefono = telefono;
       if (direccion !== undefined) dataUsuario.direccion = direccion;
 

@@ -134,9 +134,6 @@ const cambiarPassword = async (req, res) => {
       data: { password: hashedPassword },
     });
 
-    // ==========================================
-    // REGISTRO MANUAL EN BITÁCORA
-    // ==========================================
     await registrarAccionManual(
       usuario.idUsuario,
       "ACTUALIZAR CONTRASEÑA",
