@@ -315,13 +315,22 @@ const getAsistencias = async (req, res) => {
       select: { idEstudiante: true },
     });
 
+    if (!estudiante) {
+      return res.status(404).json({ error: "Estudiante no encontrado" });
+    }
+
+    const whereAsistencias = {
+      alumnoId: estudiante.idEstudiante,
+    };
+
+    if (periodoActivo?.idPeriodo) {
+      whereAsistencias.clase = {
+        periodoId: periodoActivo.idPeriodo,
+      };
+    }
+
     const asistencias = await prisma.asistencia.findMany({
-      where: {
-        alumnoId: estudiante.idEstudiante,
-        clase: {
-          periodoId: periodoActivo?.idPeriodo,
-        },
-      },
+      where: whereAsistencias,
       include: {
         clase: {
           include: {
