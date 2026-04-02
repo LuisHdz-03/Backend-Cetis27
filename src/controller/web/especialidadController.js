@@ -3,9 +3,9 @@ const XLSX = require("xlsx");
 
 const crearEspecialidad = async (req, res) => {
   try {
-    const { nombre, codigo } = req.body;
+    const { nombre, codigo, descripcion } = req.body;
     const nueva = await prisma.especialidad.create({
-      data: { nombre, codigo },
+      data: { nombre, codigo, descripcion },
     });
     res.status(201).json(nueva);
   } catch (error) {
