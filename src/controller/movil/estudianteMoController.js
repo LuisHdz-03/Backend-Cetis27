@@ -319,18 +319,18 @@ const getAsistencias = async (req, res) => {
       return res.status(404).json({ error: "Estudiante no encontrado" });
     }
 
-    const whereAsistencias = {
-      alumnoId: estudiante.idEstudiante,
-    };
-
-    if (periodoActivo?.idPeriodo) {
-      whereAsistencias.clase = {
-        periodoId: periodoActivo.idPeriodo,
-      };
-    }
-
     const asistencias = await prisma.asistencia.findMany({
-      where: whereAsistencias,
+      where: {
+        alumnoId: estudiante.idEstudiante,
+        // Solo filtramos por periodo activo si existe uno
+        ...(periodoActivo?.idPeriodo
+          ? {
+              clase: {
+                periodoId: periodoActivo.idPeriodo,
+              },
+            }
+          : {}),
+      },
       include: {
         clase: {
           include: {
@@ -357,6 +357,7 @@ const getAsistencias = async (req, res) => {
 
     res.json(historialLimpio);
   } catch (error) {
+    console.error("Error al obtener asistencias:", error); // Añadí log para ver el error real
     res.status(500).json({ error: "Error al obtener asistencias" });
   }
 };
