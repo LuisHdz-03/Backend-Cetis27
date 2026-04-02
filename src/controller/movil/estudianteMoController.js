@@ -305,10 +305,18 @@ const getHistorialAccesos = async (req, res) => {
 const getAsistencias = async (req, res) => {
   try {
     const idUsuario = req.usuario.id;
+    const { periodoId, incluirHistorico } = req.query;
 
-    const periodoActivo = await prisma.periodo.findFirst({
-      where: { activo: true },
-    });
+    let periodoFiltro = null;
+    if (periodoId) {
+      periodoFiltro = parseInt(periodoId);
+    } else if (String(incluirHistorico).toLowerCase() !== "true") {
+      const periodoActivo = await prisma.periodo.findFirst({
+        where: { activo: true },
+        select: { idPeriodo: true },
+      });
+      periodoFiltro = periodoActivo?.idPeriodo || null;
+    }
 
     const estudiante = await prisma.estudiante.findUnique({
       where: { usuarioId: idUsuario },
@@ -333,28 +341,20 @@ const getAsistencias = async (req, res) => {
     };
 
     const whereBase = { alumnoId: estudiante.idEstudiante };
-    const wherePeriodoActivo = periodoActivo?.idPeriodo
+    const wherePeriodo = periodoFiltro
       ? {
           ...whereBase,
           clase: {
-            periodoId: periodoActivo.idPeriodo,
+            periodoId: periodoFiltro,
           },
         }
       : whereBase;
 
     let asistencias = await prisma.asistencia.findMany({
-      where: wherePeriodoActivo,
+      where: wherePeriodo,
       include: includeAsistencia,
       orderBy: { fecha: "desc" },
     });
-
-    if (asistencias.length === 0 && periodoActivo?.idPeriodo) {
-      asistencias = await prisma.asistencia.findMany({
-        where: whereBase,
-        include: includeAsistencia,
-        orderBy: { fecha: "desc" },
-      });
-    }
 
     const historialLimpio = asistencias.map((a) => ({
       fecha: a.fecha,

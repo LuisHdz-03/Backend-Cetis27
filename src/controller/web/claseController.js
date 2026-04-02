@@ -1,5 +1,28 @@
 const prisma = require("../../config/prisma");
 
+const resolverFiltroPeriodo = async (query = {}) => {
+  const { periodoId, incluirHistorico } = query;
+
+  if (periodoId) {
+    return { periodoId: parseInt(periodoId) };
+  }
+
+  if (String(incluirHistorico).toLowerCase() === "true") {
+    return {};
+  }
+
+  const periodoActivo = await prisma.periodo.findFirst({
+    where: { activo: true },
+    select: { idPeriodo: true },
+  });
+
+  if (!periodoActivo) {
+    return {};
+  }
+
+  return { periodoId: periodoActivo.idPeriodo };
+};
+
 const crearClase = async (req, res) => {
   try {
     const { grupoId, materiaId, docenteId, periodoId, horario } = req.body;
@@ -64,6 +87,9 @@ const getClase = async (req, res) => {
         nombre: { contains: buscarMateria },
       };
     }
+
+    const filtroPeriodo = await resolverFiltroPeriodo(req.query);
+    filtro = { ...filtro, ...filtroPeriodo };
 
     // 3. Ejecutamos la consulta a Prisma con Paginación y Filtros
     const clases = await prisma.clase.findMany({
@@ -133,8 +159,10 @@ const getClaseByDocente = async (req, res) => {
       });
     }
 
+    const filtroPeriodo = await resolverFiltroPeriodo(req.query);
+
     const clases = await prisma.clase.findMany({
-      where: { docenteId: docente.idDocente },
+      where: { docenteId: docente.idDocente, ...filtroPeriodo },
       include: {
         grupo: true,
         materias: true,
