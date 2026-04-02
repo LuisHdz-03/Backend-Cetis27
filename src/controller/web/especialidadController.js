@@ -29,7 +29,7 @@ const getEspecialidad = async (req, res) => {
 const actualizarEspecialidad = async (req, res) => {
   try {
     const { id } = req.params;
-    const { nombre, codigo } = req.body;
+    const { nombre, codigo, descripcion } = req.body;
 
     const especialidadId = parseInt(id);
 
@@ -52,6 +52,8 @@ const actualizarEspecialidad = async (req, res) => {
       dataActualizar.nombre = nombre.trim().toUpperCase();
     if (codigo !== undefined)
       dataActualizar.codigo = codigo.trim().toUpperCase();
+    if (descripcion !== undefined)
+      dataActualizar.descripcion = descripcion ? descripcion.trim() : null;
 
     const especialidadActualizada = await prisma.especialidad.update({
       where: { idEspecialidad: especialidadId },
@@ -116,6 +118,7 @@ const cargarEspecialidadesMasivas = async (req, res) => {
     for (const fila of datosExcel) {
       const nombre = fila["NOMBRE"];
       const codigo = fila["CODIGO"];
+      const descripcion = fila["DESCRIPCION"];
 
       // Validar campos obligatorios
       if (!nombre || !codigo) {
@@ -138,9 +141,14 @@ const cargarEspecialidadesMasivas = async (req, res) => {
           // Si existe, actualizar solo los campos que sean diferentes
           const especialidadUpdate = {};
           const nombreNormalizado = String(nombre).trim().toUpperCase();
+          const descripcionNormalizada = descripcion
+            ? String(descripcion).trim()
+            : null;
 
           if (nombreNormalizado !== especialidadExiste.nombre)
             especialidadUpdate.nombre = nombreNormalizado;
+          if (descripcionNormalizada !== especialidadExiste.descripcion)
+            especialidadUpdate.descripcion = descripcionNormalizada;
 
           if (Object.keys(especialidadUpdate).length > 0) {
             await prisma.especialidad.update({
@@ -155,6 +163,7 @@ const cargarEspecialidadesMasivas = async (req, res) => {
             data: {
               nombre: String(nombre).trim().toUpperCase(),
               codigo: String(codigo).trim().toUpperCase(),
+              descripcion: descripcion ? String(descripcion).trim() : null,
             },
           });
           datosInsertados.push(nuevaEspe.nombre);
