@@ -319,32 +319,42 @@ const getAsistencias = async (req, res) => {
       return res.status(404).json({ error: "Estudiante no encontrado" });
     }
 
-    const asistencias = await prisma.asistencia.findMany({
-      where: {
-        alumnoId: estudiante.idEstudiante,
-        // Solo filtramos por periodo activo si existe uno
-        ...(periodoActivo?.idPeriodo
-          ? {
-              clase: {
-                periodoId: periodoActivo.idPeriodo,
-              },
-            }
-          : {}),
-      },
-      include: {
-        clase: {
-          include: {
-            materias: { select: { nombre: true } },
-            docente: {
-              include: {
-                usuario: { select: { nombre: true, apellidoPaterno: true } },
-              },
+    const includeAsistencia = {
+      clase: {
+        include: {
+          materias: { select: { nombre: true } },
+          docente: {
+            include: {
+              usuario: { select: { nombre: true, apellidoPaterno: true } },
             },
           },
         },
       },
+    };
+
+    const whereBase = { alumnoId: estudiante.idEstudiante };
+    const wherePeriodoActivo = periodoActivo?.idPeriodo
+      ? {
+          ...whereBase,
+          clase: {
+            periodoId: periodoActivo.idPeriodo,
+          },
+        }
+      : whereBase;
+
+    let asistencias = await prisma.asistencia.findMany({
+      where: wherePeriodoActivo,
+      include: includeAsistencia,
       orderBy: { fecha: "desc" },
     });
+
+    if (asistencias.length === 0 && periodoActivo?.idPeriodo) {
+      asistencias = await prisma.asistencia.findMany({
+        where: whereBase,
+        include: includeAsistencia,
+        orderBy: { fecha: "desc" },
+      });
+    }
 
     const historialLimpio = asistencias.map((a) => ({
       fecha: a.fecha,
