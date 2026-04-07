@@ -10,15 +10,18 @@ const JWT_SECRET = "cetis27_secret_key_2026";
 
 const login = async (req, res) => {
   try {
-    const { email, password, plataforma } = req.body;
+    const { username, password, plataforma } = req.body;
+    const usernameNormalizado = String(username || "")
+      .trim()
+      .toLowerCase();
 
-    if (!email || !password || !plataforma) {
+    if (!usernameNormalizado || !password || !plataforma) {
       return res
         .status(400)
         .json({ error: "Faltan credenciales o identificar plataforma." });
     }
     const usuario = await prisma.usuario.findUnique({
-      where: { email: email },
+      where: { username: usernameNormalizado },
       include: {
         perfilEstudiante: { include: { grupo: true } },
         perfilDocente: true,
@@ -88,6 +91,7 @@ const login = async (req, res) => {
       token,
       usuario: {
         id: usuario.idUsuario,
+        username: usuario.username,
         nombre: usuario.nombre,
         apellidoPaterno: usuario.apellidoPaterno || "",
         apellidoMaterno: usuario.apellidoMaterno || "",

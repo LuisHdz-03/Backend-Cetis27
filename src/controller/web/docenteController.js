@@ -46,6 +46,7 @@ const crearDocente = async (req, res) => {
 
     const numEmpleadoLimpio = limpiarMatricula(numeroEmpleado);
     const fechaNac = extraerFechaDesdeCURP(curp);
+    const usernameGenerado = curp.trim().toLowerCase();
     const emailGenerado = `${curp.substring(0, 10).toLowerCase()}@docentes.cetis27.edu.mx`;
 
     const passToHash = password || numEmpleadoLimpio;
@@ -58,6 +59,7 @@ const crearDocente = async (req, res) => {
           nombre,
           apellidoPaterno,
           apellidoMaterno,
+          username: usernameGenerado,
           email: emailGenerado,
           curp: curp.trim().toUpperCase(),
           fechaNacimiento: fechaNac,
@@ -88,6 +90,7 @@ const crearDocente = async (req, res) => {
       mensaje: "Docente registrado con éxito",
       datos: {
         nombre: resultado.usuario.nombre,
+        username: resultado.usuario.username,
         email: resultado.usuario.email,
         numeroEmpleado: resultado.docente.numeroEmpleado,
       },
@@ -179,6 +182,7 @@ const cargarDocentesMasivos = async (req, res) => {
       try {
         const numEmpleadoLimpio = limpiarMatricula(numEmpleadoExcel);
         const fechaNac = extraerFechaDesdeCURP(curpExcel);
+        const usernameGenerado = curpExcel.trim().toLowerCase();
         const emailGenerado = `${curpExcel.substring(0, 10).toLowerCase()}@docentes.cetis27.edu.mx`;
 
         const salt = await bcrypt.genSalt(10);
@@ -209,8 +213,10 @@ const cargarDocentesMasivos = async (req, res) => {
               usuarioUpdate.apellidoMaterno = maternoExcel || "";
             if (
               curpExcel.trim().toUpperCase() !== docenteExistente.usuario.curp
-            )
+            ) {
               usuarioUpdate.curp = curpExcel.trim().toUpperCase();
+              usuarioUpdate.username = usernameGenerado;
+            }
             if (emailGenerado !== docenteExistente.usuario.email)
               usuarioUpdate.email = emailGenerado;
             if (
@@ -234,6 +240,7 @@ const cargarDocentesMasivos = async (req, res) => {
                 nombre: nombreExcel,
                 apellidoPaterno: paternoExcel || "",
                 apellidoMaterno: maternoExcel || "",
+                username: usernameGenerado,
                 email: emailGenerado,
                 curp: curpExcel.trim().toUpperCase(),
                 fechaNacimiento: fechaNac,
@@ -370,6 +377,7 @@ const actualizarDocente = async (req, res) => {
 
     if (curp) {
       usuarioData.curp = curp.trim().toUpperCase();
+      usuarioData.username = curp.trim().toLowerCase();
       usuarioData.fechaNacimiento = extraerFechaDesdeCURP(curp);
     }
 

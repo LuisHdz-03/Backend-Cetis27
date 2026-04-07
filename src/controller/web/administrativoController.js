@@ -79,6 +79,7 @@ const crearAdministrativo = async (req, res) => {
 
     const numEmpleadoLimpio = limpiarMatricula(numeroEmpleado);
     const fechaNac = extraerFechaDesdeCURP(curp);
+    const usernameGenerado = curp.trim().toLowerCase();
     const emailGenerado = `${curp.substring(0, 10).toLowerCase()}@admin.cetis27.edu.mx`;
 
     const salt = await bcrypt.genSalt(10);
@@ -93,6 +94,7 @@ const crearAdministrativo = async (req, res) => {
           nombre,
           apellidoPaterno,
           apellidoMaterno,
+          username: usernameGenerado,
           email: emailGenerado,
           curp: curp.trim().toUpperCase(),
           fechaNacimiento: fechaNac,
@@ -221,6 +223,7 @@ const cargarAdministrativosMasivos = async (req, res) => {
       try {
         const numEmpleadoLimpio = limpiarMatricula(numEmpleadoExcel);
         const fechaNac = extraerFechaDesdeCURP(curpExcel);
+        const usernameGenerado = curpExcel.trim().toLowerCase();
         const emailGenerado = `${curpExcel.substring(0, 10).toLowerCase()}@admin.cetis27.edu.mx`;
 
         const salt = await bcrypt.genSalt(10);
@@ -254,8 +257,10 @@ const cargarAdministrativosMasivos = async (req, res) => {
             if (
               curpExcel.trim().toUpperCase() !==
               administrativoExistente.usuario.curp
-            )
+            ) {
               usuarioUpdate.curp = curpExcel.trim().toUpperCase();
+              usuarioUpdate.username = usernameGenerado;
+            }
             if (emailGenerado !== administrativoExistente.usuario.email)
               usuarioUpdate.email = emailGenerado;
             if (
@@ -295,6 +300,7 @@ const cargarAdministrativosMasivos = async (req, res) => {
                 nombre: nombreExcel,
                 apellidoPaterno: fila["PATERNO"] || "",
                 apellidoMaterno: fila["MATERNO"] || "",
+                username: usernameGenerado,
                 email: emailGenerado,
                 curp: curpExcel.trim().toUpperCase(),
                 fechaNacimiento: fechaNac,
@@ -416,7 +422,10 @@ const actualizarAdministrativo = async (req, res) => {
         usuarioData.apellidoPaterno = apellidoPaterno;
       if (apellidoMaterno !== undefined)
         usuarioData.apellidoMaterno = apellidoMaterno;
-      if (curp !== undefined) usuarioData.curp = curp.trim().toUpperCase();
+      if (curp !== undefined) {
+        usuarioData.curp = curp.trim().toUpperCase();
+        usuarioData.username = curp.trim().toLowerCase();
+      }
       if (telefono !== undefined) usuarioData.telefono = telefono;
       if (activo !== undefined) usuarioData.activo = activo;
 
