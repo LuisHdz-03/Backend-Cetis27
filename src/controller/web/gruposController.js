@@ -361,8 +361,12 @@ const actualizarGrupo = async (req, res) => {
       });
 
       if (materiasIds !== undefined && Array.isArray(materiasIds)) {
-        // Limpiamos las clases actuales del grupo
-        await tx.clase.deleteMany({ where: { grupoId } });
+        await tx.clase.deleteMany({
+          where: {
+            grupoId: grupoId,
+            periodoId: parseInt(periodoId, 10),
+          },
+        });
 
         if (parsedMateriasIds.length > 0) {
           const clasesData = parsedMateriasIds.map((materiaId) => ({
@@ -577,8 +581,14 @@ const descargarPlantillaGrupos = async (req, res) => {
 
     const instrucciones = [
       { CAMPO: "NOMBRE", DESCRIPCION: "Nombre del grupo (obligatorio)" },
-      { CAMPO: "GRADO", DESCRIPCION: "Grado del grupo en numero (obligatorio)" },
-      { CAMPO: "TURNO", DESCRIPCION: "MATUTINO, VESPERTINO o MIXTO (obligatorio)" },
+      {
+        CAMPO: "GRADO",
+        DESCRIPCION: "Grado del grupo en numero (obligatorio)",
+      },
+      {
+        CAMPO: "TURNO",
+        DESCRIPCION: "MATUTINO, VESPERTINO o MIXTO (obligatorio)",
+      },
       {
         CAMPO: "AULA",
         DESCRIPCION:
