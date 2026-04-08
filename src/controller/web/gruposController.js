@@ -11,13 +11,19 @@ const crearGrupo = async (req, res) => {
       periodoId, // Este lo conservamos SOLO para crear las clases, no el grupo
       especialidadId,
       docenteId,
+      docenteTutorId,
       materiasIds,
     } = req.body;
 
-    // Ya no exigimos periodoId para el grupo, solo especialidadId.
-    // (A menos que quieras hacerlo obligatorio para crear las clases iniciales)
+    // Validaciones
     if (!especialidadId) {
       return res.status(400).json({ error: "Falta ID de la Especialidad" });
+    }
+
+    if (!docenteTutorId) {
+      return res
+        .status(400)
+        .json({ error: "Falta ID del Docente Tutor del grupo" });
     }
 
     const nuevoGrupo = await prisma.$transaction(async (tx) => {
@@ -28,7 +34,20 @@ const crearGrupo = async (req, res) => {
           turno,
           aula,
           especialidadId: parseInt(especialidadId),
-          // SE ELIMINÓ: periodoId
+          docenteTutorId: parseInt(docenteTutorId),
+        },
+        include: {
+          docenteTutor: {
+            include: {
+              usuario: {
+                select: {
+                  nombre: true,
+                  apellidoPaterno: true,
+                  apellidoMaterno: true,
+                },
+              },
+            },
+          },
         },
       });
 
@@ -72,6 +91,18 @@ const getGrupos = async (req, res) => {
       include: {
         especialidad: {
           select: { nombre: true, codigo: true },
+        },
+        docenteTutor: {
+          include: {
+            usuario: {
+              select: {
+                nombre: true,
+                apellidoPaterno: true,
+                apellidoMaterno: true,
+                username: true,
+              },
+            },
+          },
         },
         clases: {
           include: {
@@ -120,11 +151,22 @@ const getGrupoById = async (req, res) => {
           orderBy: { usuario: { apellidoPaterno: "asc" } },
         },
         especialidad: true,
-        // SE ELIMINÓ: periodo: true
+        docenteTutor: {
+          include: {
+            usuario: {
+              select: {
+                nombre: true,
+                apellidoPaterno: true,
+                apellidoMaterno: true,
+                username: true,
+              },
+            },
+          },
+        },
         clases: {
           include: {
             materias: true,
-            periodo: true, // Incluido aquí en vez de en el grupo
+            periodo: true,
             docente: {
               include: {
                 usuario: { select: { nombre: true, apellidoPaterno: true } },
@@ -152,6 +194,7 @@ const actualizarGrupo = async (req, res) => {
       especialidadId,
       periodoId,
       docenteId,
+      docenteTutorId,
       materiasIds,
     } = req.body;
 
@@ -186,6 +229,13 @@ const actualizarGrupo = async (req, res) => {
       parsedPeriodoId = parseInt(periodoId, 10);
       if (isNaN(parsedPeriodoId))
         return res.status(400).json({ error: "periodoId inválido" });
+    }
+
+    let parsedDocenteTutorId = null;
+    if (docenteTutorId !== undefined && docenteTutorId !== null) {
+      parsedDocenteTutorId = parseInt(docenteTutorId, 10);
+      if (isNaN(parsedDocenteTutorId))
+        return res.status(400).json({ error: "docenteTutorId inválido" });
     }
 
     let parsedMateriasIds = [];
@@ -248,11 +298,30 @@ const actualizarGrupo = async (req, res) => {
       dataActualizar.aula = aula ? String(aula).trim() : null;
     if (especialidadId !== undefined)
       dataActualizar.especialidadId = parseInt(especialidadId, 10);
+    if (parsedDocenteTutorId !== null)
+      dataActualizar.docenteTutorId = parsedDocenteTutorId;
 
     const grupoActualizado = await prisma.$transaction(async (tx) => {
       const grupo = await tx.grupo.update({
         where: { idGrupo: grupoId },
         data: dataActualizar,
+        include: {
+          docenteTutor: {
+            include: {
+              usuario: { 
+                select: { 
+                  nombre: true, 
+                  apellidoPaterno: true, 
+                  apellidoMaterno: true,
+                  username: true
+                } 
+              },
+            },
+          },
+          especialidad: {
+            select: { nombre: true, codigo: true }
+          }
+        }
       });
 
       if (materiasIds !== undefined && Array.isArray(materiasIds)) {

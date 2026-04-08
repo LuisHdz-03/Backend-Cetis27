@@ -38,6 +38,7 @@ model Docente {
   especialidadId    Int?
   fechaContratacion DateTime?
   clases            Clase[]
+  gruposComoTutor   Grupo[]       @relation("GrupoTutor")
   especialidad      Especialidad? @relation(fields: [especialidadId], references: [idEspecialidad])
   usuario           Usuario       @relation(fields: [usuarioId], references: [idUsuario])
   reportesHechos    Reporte[]     @relation("ReportadoPor")
@@ -112,10 +113,12 @@ model Grupo {
   turno          Turno
   aula           String?
   especialidadId Int
+  docenteTutorId Int
   activo         Boolean      @default(true)
   clases         Clase[]
   estudiantes    Estudiante[]
   especialidad   Especialidad @relation(fields: [especialidadId], references: [idEspecialidad])
+  docenteTutor   Docente      @relation("GrupoTutor", fields: [docenteTutorId], references: [idDocente])
 
   @@map("grupos")
 }
