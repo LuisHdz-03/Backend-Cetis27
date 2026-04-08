@@ -24,7 +24,7 @@ const crearGrupo = async (req, res) => {
       grado,
       turno,
       aula,
-      periodoId, // Este lo conservamos SOLO para crear las clases, no el grupo
+      periodoId,
       especialidadId,
       docenteId,
       docenteTutorId,
@@ -82,7 +82,7 @@ const crearGrupo = async (req, res) => {
         materiasIds &&
         Array.isArray(materiasIds) &&
         materiasIds.length > 0 &&
-        periodoId // Ahora nos aseguramos que haya un periodoId para crear la clase
+        periodoId
       ) {
         const clasesData = materiasIds.map((materiaId) => ({
           grupoId: grupoCreado.idGrupo,
