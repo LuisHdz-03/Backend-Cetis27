@@ -131,6 +131,7 @@ const getGrupos = async (req, res) => {
           },
         },
         clases: {
+          where: { periodo: { activo: true } },
           include: {
             materias: true,
             docente: {
@@ -190,6 +191,7 @@ const getGrupoById = async (req, res) => {
           },
         },
         clases: {
+          where: { periodo: { activo: true } },
           include: {
             materias: true,
             periodo: true,

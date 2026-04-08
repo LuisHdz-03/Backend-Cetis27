@@ -134,6 +134,7 @@ if (
     "⚠️  Faltan variables de entorno de Cloudinary: CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET",
   );
 }
+
 const getAlumnosMovil = async (req, res) => {
   try {
     const idUsuario = req.usuario.id;
@@ -171,6 +172,21 @@ const getAlumnosMovil = async (req, res) => {
             grado: true,
             turno: true,
             especialidad: { select: { nombre: true } },
+            clases: {
+              where: {
+                periodo: { activo: true }, 
+              },
+              include: {
+                materias: true,
+                docente: {
+                  include: {
+                    usuario: {
+                      select: { nombre: true, apellidoPaterno: true },
+                    },
+                  },
+                },
+              },
+            },
           },
         },
       },
@@ -525,7 +541,7 @@ const getAsistencias = async (req, res) => {
 
     res.json(historialLimpio);
   } catch (error) {
-    console.error("Error al obtener asistencias:", error); // Añadí log para ver el error real
+    console.error("Error al obtener asistencias:", error);
     res.status(500).json({ error: "Error al obtener asistencias" });
   }
 };
@@ -542,7 +558,6 @@ const getReportesEstudianteMovil = async (req, res) => {
       return res.status(404).json({ error: "Estudiante no encontrado" });
     }
 
-    // 2. Traemos sus reportes con la info del docente que reportó
     const reportes = await prisma.reporte.findMany({
       where: { alumnoId: estudiante.idEstudiante },
       include: {
@@ -555,7 +570,6 @@ const getReportesEstudianteMovil = async (req, res) => {
       orderBy: { fecha: "desc" },
     });
 
-    // 3. Limpiamos los datos para que la app móvil los reciba fácil
     const reportesLimpios = reportes.map((r) => ({
       id: r.idReporte,
       titulo: r.titulo,
