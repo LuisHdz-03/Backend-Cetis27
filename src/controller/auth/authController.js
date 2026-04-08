@@ -1,12 +1,20 @@
 const prisma = require("../../config/prisma");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
+const crypto = require("crypto");
+
+const { enviarCorreoRecuperacion } = require("../../utils/mailer");
 
 const {
   registrarAccionManual,
 } = require("../../middlewares/bitacoraMiddleware");
 
-const JWT_SECRET = "cetis27_secret_key_2026";
+const getJwtSecret = () => {
+  if (!process.env.JWT_SECRET) {
+    throw new Error("JWT_SECRET no está configurada en variables de entorno");
+  }
+  return process.env.JWT_SECRET;
+};
 
 const login = async (req, res) => {
   try {
@@ -63,6 +71,8 @@ const login = async (req, res) => {
       perfilData = usuario.perfilDocente;
     } else if (usuario.rol === "ADMINISTRATIVO") {
       perfilData = usuario.perfilAdministrativo;
+    } else if (usuario.rol === "DIRECTIVO") {
+      perfilData = usuario.perfilAdministrativo;
     } else if (usuario.rol === "PREFECTO") {
       perfilData = usuario.perfilAdministrativo;
     }
@@ -73,13 +83,10 @@ const login = async (req, res) => {
         rol: usuario.rol,
         nombre: usuario.nombre,
       },
-      JWT_SECRET,
+      getJwtSecret(),
       { expiresIn: plataforma === "WEB" ? "8h" : "7d" },
     );
 
-    // ==========================================
-    // REGISTRO MANUAL EN BITÁCORA PARA EL LOGIN
-    // ==========================================
     await registrarAccionManual(
       usuario.idUsuario,
       "LOGIN",
@@ -110,10 +117,16 @@ const login = async (req, res) => {
 
 const cambiarPassword = async (req, res) => {
   try {
-    const { idUsuario, passwordActual, passwordNueva } = req.body;
+    // idUsuario siempre viene del JWT (req.usuario), nunca del body
+    const idUsuario = req.usuario?.id;
+    const { passwordActual, passwordNueva } = req.body;
 
     if (!idUsuario || !passwordActual || !passwordNueva) {
       return res.status(400).json({ error: "Faltan datos obligatorios" });
+    }
+
+    if (passwordNueva.length < 8) {
+      return res.status(400).json({ error: "La nueva contraseña debe tener al menos 8 caracteres" });
     }
 
     const usuario = await prisma.usuario.findUnique({
@@ -155,10 +168,17 @@ const cambiarPassword = async (req, res) => {
 // Endpoint especial para cambio de contraseña obligatorio en el primer login
 const cambiarPasswordObligatorio = async (req, res) => {
   try {
-    const { idUsuario, passwordNueva } = req.body;
+    const { passwordNueva } = req.body;
+    const idUsuario = req.usuario?.id;
 
     if (!idUsuario || !passwordNueva) {
-      return res.status(400).json({ error: "Faltan datos obligatorios (idUsuario, passwordNueva)" });
+      return res
+        .status(400)
+        .json({ error: "Faltan datos obligatorios (passwordNueva)" });
+    }
+
+    if (passwordNueva.length < 8) {
+      return res.status(400).json({ error: "La nueva contraseña debe tener al menos 8 caracteres" });
     }
 
     const usuario = await prisma.usuario.findUnique({
@@ -170,7 +190,9 @@ const cambiarPasswordObligatorio = async (req, res) => {
     }
 
     if (!usuario.passwordChangeRequired) {
-      return res.status(400).json({ error: "Este usuario ya cambió su contraseña" });
+      return res
+        .status(400)
+        .json({ error: "Este usuario ya cambió su contraseña" });
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -178,7 +200,7 @@ const cambiarPasswordObligatorio = async (req, res) => {
 
     await prisma.usuario.update({
       where: { idUsuario: parseInt(idUsuario) },
-      data: { 
+      data: {
         password: hashedPassword,
         passwordChangeRequired: false,
       },
@@ -190,9 +212,10 @@ const cambiarPasswordObligatorio = async (req, res) => {
       "El usuario cambió su contraseña obligatoria de primer login.",
     );
 
-    res.json({ 
-      ok: true, 
-      mensaje: "Contraseña actualizada exitosamente. Por favor, inicia sesión nuevamente con tu nueva contraseña." 
+    res.json({
+      ok: true,
+      mensaje:
+        "Contraseña actualizada exitosamente. Por favor, inicia sesión nuevamente con tu nueva contraseña.",
     });
   } catch (error) {
     console.error("Error al cambiar contraseña obligatoria:", error);
@@ -200,4 +223,309 @@ const cambiarPasswordObligatorio = async (req, res) => {
   }
 };
 
-module.exports = { login, cambiarPassword, cambiarPasswordObligatorio };
+// Helper interno: genera token, lo guarda y envía el correo
+const generarYEnviarTokenRecuperacion = async (usuario, emailDestino) => {
+  const tokenPlano = crypto.randomBytes(32).toString("hex");
+  const tokenHash = crypto
+    .createHash("sha256")
+    .update(tokenPlano)
+    .digest("hex");
+  const expiracion = new Date(Date.now() + 15 * 60 * 1000);
+
+  await prisma.usuario.update({
+    where: { idUsuario: usuario.idUsuario },
+    data: {
+      resetPasswordTokenHash: tokenHash,
+      resetPasswordExpiresAt: expiracion,
+    },
+  });
+
+  await enviarCorreoRecuperacion({
+    emailDestino,
+    nombreUsuario: `${usuario.nombre} ${usuario.apellidoPaterno}`.trim(),
+    token: tokenPlano,
+  });
+
+  await registrarAccionManual(
+    usuario.idUsuario,
+    "SOLICITUD RECUPERACION PASSWORD",
+    "Se generó token de recuperación de contraseña por correo.",
+  );
+};
+
+// Flujo:
+// 1. Enviar { username } → si tiene correo, se manda el enlace.
+// 2. Si no tiene correo, back responde { ok: false, necesitaCorreo: true }.
+// 3. Cliente reenvía { username, email, curp } → back verifica CURP, registra
+//    el correo y manda el enlace de recuperación.
+const solicitarRecuperacionPassword = async (req, res) => {
+  try {
+    const { username, email, curp } = req.body;
+    const usernameNormalizado = String(username || "").trim().toLowerCase();
+
+    if (!usernameNormalizado) {
+      return res.status(400).json({ error: "El nombre de usuario es obligatorio" });
+    }
+
+    // Respuesta genérica para evitar enumeración de usuarios
+    const mensajeGenerico =
+      "Si los datos son correctos, se enviará un enlace de recuperación al correo registrado.";
+
+    const usuario = await prisma.usuario.findFirst({
+      where: { username: usernameNormalizado, activo: true },
+    });
+
+    if (!usuario) {
+      return res.json({ ok: true, mensaje: mensajeGenerico });
+    }
+
+    // --- Caso 1: el usuario ya tiene correo registrado ---
+    if (usuario.email) {
+      await generarYEnviarTokenRecuperacion(usuario, usuario.email);
+      return res.json({ ok: true, mensaje: mensajeGenerico });
+    }
+
+    // --- Caso 2: usuario sin correo ---
+    const emailNormalizado = String(email || "").trim().toLowerCase();
+    const curpNormalizada = String(curp || "").trim().toUpperCase();
+
+    // Si no se proporcionó email+CURP, informar al frontend que los necesita
+    if (!emailNormalizado || !curpNormalizada) {
+      return res.status(200).json({
+        ok: false,
+        necesitaCorreo: true,
+        mensaje:
+          "Este usuario no tiene correo registrado. Proporciona tu correo y CURP para verificar tu identidad y continuar.",
+      });
+    }
+
+    // Validar formato de email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(emailNormalizado)) {
+      return res.status(400).json({ error: "El formato del correo no es válido" });
+    }
+
+    // Verificar identidad con CURP
+    if (!usuario.curp || usuario.curp.toUpperCase() !== curpNormalizada) {
+      return res.status(400).json({
+        error: "Los datos no coinciden con los registros del sistema",
+      });
+    }
+
+    // Verificar que el correo no esté en uso por otro usuario
+    const correoOcupado = await prisma.usuario.findFirst({
+      where: {
+        email: emailNormalizado,
+        idUsuario: { not: usuario.idUsuario },
+      },
+    });
+    if (correoOcupado) {
+      return res.status(409).json({
+        error: "El correo ya está registrado en el sistema por otro usuario",
+      });
+    }
+
+    // Registrar el correo en la cuenta del usuario
+    await prisma.usuario.update({
+      where: { idUsuario: usuario.idUsuario },
+      data: { email: emailNormalizado },
+    });
+
+    await registrarAccionManual(
+      usuario.idUsuario,
+      "REGISTRAR CORREO EN RECUPERACION",
+      `Se registró correo durante recuperación de contraseña (verificado con CURP).`,
+    );
+
+    await generarYEnviarTokenRecuperacion(
+      { ...usuario, email: emailNormalizado },
+      emailNormalizado,
+    );
+
+    return res.json({ ok: true, mensaje: mensajeGenerico });
+  } catch (error) {
+    console.error("Error al solicitar recuperación de contraseña:", error);
+    return res.status(500).json({ error: "Error interno del servidor" });
+  }
+};
+
+const restablecerPasswordConToken = async (req, res) => {
+  try {
+    const { token, passwordNueva } = req.body;
+
+    if (!token || !passwordNueva) {
+      return res.status(400).json({
+        error: "Faltan datos obligatorios (token, passwordNueva)",
+      });
+    }
+
+    if (passwordNueva.length < 8) {
+      return res.status(400).json({ error: "La nueva contraseña debe tener al menos 8 caracteres" });
+    }
+
+    const tokenHash = crypto
+      .createHash("sha256")
+      .update(String(token))
+      .digest("hex");
+
+    const usuario = await prisma.usuario.findFirst({
+      where: {
+        resetPasswordTokenHash: tokenHash,
+        resetPasswordExpiresAt: {
+          gt: new Date(),
+        },
+        activo: true,
+      },
+    });
+
+    if (!usuario) {
+      return res.status(400).json({
+        error: "Token inválido o expirado",
+      });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(passwordNueva, salt);
+
+    await prisma.usuario.update({
+      where: { idUsuario: usuario.idUsuario },
+      data: {
+        password: hashedPassword,
+        passwordChangeRequired: false,
+        resetPasswordTokenHash: null,
+        resetPasswordExpiresAt: null,
+      },
+    });
+
+    await registrarAccionManual(
+      usuario.idUsuario,
+      "RESTABLECER PASSWORD",
+      "El usuario restableció su contraseña con token de correo.",
+    );
+
+    return res.json({
+      ok: true,
+      mensaje: "Contraseña restablecida correctamente",
+    });
+  } catch (error) {
+    console.error("Error al restablecer contraseña:", error);
+    return res.status(500).json({ error: "Error interno del servidor" });
+  }
+};
+
+const getMiPerfil = async (req, res) => {
+  try {
+    const idUsuario = req.usuario?.id;
+
+    if (!idUsuario) {
+      return res.status(401).json({ error: "No autenticado" });
+    }
+
+    const usuario = await prisma.usuario.findUnique({
+      where: { idUsuario: parseInt(idUsuario, 10) },
+      include: {
+        perfilEstudiante: true,
+        perfilDocente: true,
+        perfilAdministrativo: true,
+      },
+    });
+
+    if (!usuario) {
+      return res.status(404).json({ error: "Usuario no encontrado" });
+    }
+
+    let perfil = null;
+    if (usuario.rol === "ALUMNO") {
+      perfil = usuario.perfilEstudiante;
+    } else if (usuario.rol === "DOCENTE") {
+      perfil = usuario.perfilDocente;
+    } else {
+      perfil = usuario.perfilAdministrativo;
+    }
+
+    return res.json({
+      ok: true,
+      usuario: {
+        id: usuario.idUsuario,
+        username: usuario.username,
+        nombre: usuario.nombre,
+        apellidoPaterno: usuario.apellidoPaterno,
+        apellidoMaterno: usuario.apellidoMaterno,
+        email: usuario.email,
+        telefono: usuario.telefono,
+        curp: usuario.curp,
+        rol: usuario.rol,
+        activo: usuario.activo,
+        perfil,
+      },
+      capacidades: {
+        accesoInstitucionalCompleto: ["DIRECTIVO", "ADMINISTRATIVO"].includes(
+          usuario.rol,
+        ),
+        puedeVerBitacoraCompleta: ["DIRECTIVO", "ADMINISTRATIVO"].includes(
+          usuario.rol,
+        ),
+      },
+    });
+  } catch (error) {
+    console.error("Error al obtener mi perfil:", error);
+    return res.status(500).json({ error: "Error interno del servidor" });
+  }
+};
+
+// Permite que un usuario autenticado registre o actualice su correo
+const registrarCorreo = async (req, res) => {
+  try {
+    const idUsuario = req.usuario?.id;
+    const { email } = req.body;
+    const emailNormalizado = String(email || "").trim().toLowerCase();
+
+    if (!emailNormalizado) {
+      return res.status(400).json({ error: "El correo es obligatorio" });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(emailNormalizado)) {
+      return res.status(400).json({ error: "El formato del correo no es válido" });
+    }
+
+    // Verificar que no esté en uso por otro usuario
+    const correoOcupado = await prisma.usuario.findFirst({
+      where: {
+        email: emailNormalizado,
+        idUsuario: { not: parseInt(idUsuario) },
+      },
+    });
+    if (correoOcupado) {
+      return res.status(409).json({
+        error: "El correo ya está registrado en el sistema por otro usuario",
+      });
+    }
+
+    await prisma.usuario.update({
+      where: { idUsuario: parseInt(idUsuario) },
+      data: { email: emailNormalizado },
+    });
+
+    await registrarAccionManual(
+      parseInt(idUsuario),
+      "REGISTRAR CORREO",
+      `El usuario registró/actualizó su correo electrónico.`,
+    );
+
+    return res.json({ ok: true, mensaje: "Correo registrado correctamente" });
+  } catch (error) {
+    console.error("Error al registrar correo:", error);
+    return res.status(500).json({ error: "Error interno del servidor" });
+  }
+};
+
+module.exports = {
+  login,
+  cambiarPassword,
+  cambiarPasswordObligatorio,
+  solicitarRecuperacionPassword,
+  restablecerPasswordConToken,
+  getMiPerfil,
+  registrarCorreo,
+};

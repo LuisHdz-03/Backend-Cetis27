@@ -3,7 +3,6 @@ const router = Router();
 
 const { verificarToken } = require("../../middlewares/authMiddleware");
 const {
-  bitacoraLogin,
   bitacoraConsultar,
   bitacoraActualizar,
   bitacoraCrear,
@@ -17,6 +16,7 @@ const {
   actualizartutor,
   getAsistencias,
   getCredencial,
+  guardarDisenioCredencialMovil,
   getHistorialAccesos,
   getReportesEstudianteMovil,
   cambiarContrasenia,
@@ -26,7 +26,7 @@ router.get("/", (req, res) => {
   res.json({ mensaje: "Bienvenido a la App Móvil (Estudiantes/Docentes)" });
 });
 
-router.post("/auth/login", loginLimiter, bitacoraLogin, login);
+router.post("/auth/login", loginLimiter, login);
 router.use(verificarToken);
 
 router.get("/perfil", bitacoraConsultar, getAlumnosMovil);
@@ -41,6 +41,11 @@ router.post("/perfil/tutor", bitacoraCrear, actualizartutor);
 router.put("/perfil/contrasenia", bitacoraActualizar, cambiarContrasenia);
 
 router.get("/credencial", bitacoraConsultar, getCredencial);
+router.post(
+  "/credencial/disenio",
+  bitacoraActualizar,
+  guardarDisenioCredencialMovil,
+);
 
 router.get("/accesos", bitacoraConsultar, getHistorialAccesos);
 router.get("/asistencias", bitacoraConsultar, getAsistencias);

@@ -286,6 +286,42 @@ const getMateriasPorEspecialidad = async (req, res) => {
   }
 };
 
+const descargarPlantillaMaterias = async (req, res) => {
+  try {
+    const filasEjemplo = [
+      {
+        NOMBRE: "PROGRAMACION WEB",
+        CODIGO: "PRG401",
+        HORAS_SEMANA: 5,
+        SEMESTRE: 4,
+        ESPECIALIDAD: "PROGRAMACION",
+      },
+    ];
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(filasEjemplo);
+    XLSX.utils.book_append_sheet(wb, ws, "Plantilla_Materias");
+
+    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    res.setHeader(
+      "Content-Disposition",
+      'attachment; filename="plantilla_materias.xlsx"',
+    );
+
+    return res.send(buffer);
+  } catch (error) {
+    console.error("Error al generar plantilla de materias:", error);
+    return res
+      .status(500)
+      .json({ error: "Error al generar plantilla de materias" });
+  }
+};
+
 module.exports = {
   crearMateria,
   getMateria,
@@ -293,4 +329,5 @@ module.exports = {
   eliminarMateria,
   cargarMateriasMasivas,
   getMateriasPorEspecialidad,
+  descargarPlantillaMaterias,
 };

@@ -202,15 +202,13 @@ const cargarDocentesMasivos = async (req, res) => {
       try {
         const numEmpleadoLimpio = limpiarMatricula(numEmpleadoExcel);
         const fechaNac = extraerFechaDesdeCURP(curpExcel);
-        const usernameGenerado = curpExcel.trim().toLowerCase();
+        const usernameGenerado = numEmpleadoLimpio;
+        const passwordInicial = extraerFechaPasswordDesdeCURP(curpExcel);
         const emailExcel = fila["EMAIL"];
         const emailNormalizado = emailExcel ? String(emailExcel).trim().toLowerCase() : null;
 
         const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(
-          String(numEmpleadoLimpio),
-          salt,
-        );
+        const hashedPassword = await bcrypt.hash(passwordInicial, salt);
 
         await prisma.$transaction(async (tx) => {
           // Buscar si ya existe un docente con ese número de empleado
@@ -268,6 +266,7 @@ const cargarDocentesMasivos = async (req, res) => {
                 password: hashedPassword,
                 rol: "DOCENTE",
                 activo: true,
+                passwordChangeRequired: true,
               },
             });
 
@@ -399,7 +398,10 @@ const actualizarDocente = async (req, res) => {
 
     if (curp) {
       usuarioData.curp = curp.trim().toUpperCase();
-      usuarioData.username = curp.trim().toLowerCase();
+      const numeroEmpleadoParaUsername = numeroEmpleado
+        ? limpiarMatricula(numeroEmpleado)
+        : docenteActual.numeroEmpleado;
+      usuarioData.username = numeroEmpleadoParaUsername;
       usuarioData.fechaNacimiento = extraerFechaDesdeCURP(curp);
     }
     if (email !== undefined) {
@@ -462,10 +464,59 @@ const actualizarDocente = async (req, res) => {
     });
   }
 };
+
+const descargarPlantillaDocentes = async (req, res) => {
+  try {
+    const filasEjemplo = [
+      {
+        "NUM EMPLEADO": "DOC001",
+        NOMBRE: "MARIA",
+        PATERNO: "GOMEZ",
+        MATERNO: "LOPEZ",
+        CURP: "GOLM850101MDFRPR01",
+        EMAIL: "docente@correo.com",
+      },
+    ];
+
+    const instrucciones = [
+      { CAMPO: "NUM EMPLEADO", DESCRIPCION: "Numero de empleado (obligatorio)" },
+      { CAMPO: "NOMBRE", DESCRIPCION: "Nombre del docente (obligatorio)" },
+      { CAMPO: "PATERNO", DESCRIPCION: "Apellido paterno (opcional)" },
+      { CAMPO: "MATERNO", DESCRIPCION: "Apellido materno (opcional)" },
+      { CAMPO: "CURP", DESCRIPCION: "CURP (obligatorio)" },
+      { CAMPO: "EMAIL", DESCRIPCION: "Correo electronico (opcional)" },
+    ];
+
+    const wb = XLSX.utils.book_new();
+    const wsEjemplo = XLSX.utils.json_to_sheet(filasEjemplo);
+    const wsInstrucciones = XLSX.utils.json_to_sheet(instrucciones);
+    XLSX.utils.book_append_sheet(wb, wsEjemplo, "Plantilla_Docentes");
+    XLSX.utils.book_append_sheet(wb, wsInstrucciones, "Instrucciones");
+
+    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    res.setHeader(
+      "Content-Disposition",
+      'attachment; filename="plantilla_docentes.xlsx"',
+    );
+
+    return res.send(buffer);
+  } catch (error) {
+    console.error("Error al generar plantilla de docentes:", error);
+    return res
+      .status(500)
+      .json({ error: "Error al generar plantilla de docentes" });
+  }
+};
 module.exports = {
   crearDocente,
   getDocentes,
   cargarDocentesMasivos,
   eliminarDocente,
   actualizarDocente,
+  descargarPlantillaDocentes,
 };

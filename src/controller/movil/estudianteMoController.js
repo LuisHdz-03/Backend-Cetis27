@@ -1,10 +1,122 @@
 const prisma = require("../../config/prisma");
 const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
 const path = require("path");
 const sharp = require("sharp");
 const fs = require("fs");
 const QRCode = require("qrcode");
 const cloudinary = require("cloudinary").v2;
+
+const getJwtSecret = () => {
+  if (!process.env.JWT_SECRET) {
+    throw new Error("JWT_SECRET no está configurada en variables de entorno");
+  }
+  return process.env.JWT_SECRET;
+};
+const CREDENCIAL_DISENIO_FILE = path.join(
+  __dirname,
+  "../../../public/uploads/credencial/disenio-app-movil.json",
+);
+
+const obtenerFirmanteCredencial = async () => {
+  const director = await prisma.administrativo.findFirst({
+    where: {
+      cargo: { in: ["DIRECTOR", "DIRECTORA"] },
+      usuario: { activo: true },
+    },
+    include: {
+      usuario: {
+        select: {
+          nombre: true,
+          apellidoPaterno: true,
+          apellidoMaterno: true,
+        },
+      },
+    },
+    orderBy: { idAdministrativo: "desc" },
+  });
+
+  if (!director || !director.usuario) {
+    return {
+      cargo: "DIRECCION DEL PLANTEL",
+      nombre: null,
+      fuente: "fallback",
+    };
+  }
+
+  const nombreCompleto = [
+    director.usuario.nombre,
+    director.usuario.apellidoPaterno,
+    director.usuario.apellidoMaterno,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+
+  return {
+    cargo: director.cargo,
+    nombre: nombreCompleto || null,
+    fuente: "administrativo_activo",
+  };
+};
+
+const guardarDisenioCredencialMovil = async (req, res) => {
+  try {
+    const syncKey = req.headers["x-layout-sync-key"];
+
+    if (!process.env.CREDENCIAL_SYNC_KEY) {
+      return res.status(503).json({
+        error:
+          "No está configurada la variable CREDENCIAL_SYNC_KEY en el servidor.",
+      });
+    }
+
+    if (!syncKey || syncKey !== process.env.CREDENCIAL_SYNC_KEY) {
+      return res
+        .status(401)
+        .json({ error: "Clave de sincronización inválida." });
+    }
+
+    const { diseno, appVersion, plataforma } = req.body;
+
+    if (!diseno || typeof diseno !== "object" || Array.isArray(diseno)) {
+      return res.status(400).json({
+        error: "Debes enviar un objeto 'diseno' válido en el body.",
+      });
+    }
+
+    const payload = {
+      appVersion: appVersion || "desconocida",
+      plataforma: plataforma || "MOVIL",
+      sincronizadoEn: new Date().toISOString(),
+      sincronizadoPor: {
+        idUsuario: req.usuario?.id || null,
+        rol: req.usuario?.rol || null,
+      },
+      diseno,
+    };
+
+    const directorio = path.dirname(CREDENCIAL_DISENIO_FILE);
+    fs.mkdirSync(directorio, { recursive: true });
+    fs.writeFileSync(
+      CREDENCIAL_DISENIO_FILE,
+      JSON.stringify(payload, null, 2),
+      "utf8",
+    );
+
+    return res.json({
+      mensaje: "Diseño de credencial móvil sincronizado correctamente.",
+      archivo: "/uploads/credencial/disenio-app-movil.json",
+      appVersion: payload.appVersion,
+      sincronizadoEn: payload.sincronizadoEn,
+    });
+  } catch (error) {
+    console.error("Error guardando diseño de credencial móvil:", error);
+    return res
+      .status(500)
+      .json({ error: "No se pudo guardar el diseño de credencial." });
+  }
+};
 
 //configuracion del cloudinary
 
@@ -210,6 +322,7 @@ const actualizartutor = async (req, res) => {
 const getCredencial = async (req, res) => {
   try {
     const idUsuario = req.usuario.id;
+    const firmante = await obtenerFirmanteCredencial();
 
     const estudiante = await prisma.estudiante.findUnique({
       where: { usuarioId: idUsuario },
@@ -253,6 +366,9 @@ const getCredencial = async (req, res) => {
       estudiante.credencialFechaExpiracion,
     );
 
+    const qrPayload = `${estudiante.matricula}|${Date.now()}`;
+    const qrBase64 = await QRCode.toDataURL(qrPayload);
+
     // Armamos el objeto de respuesta de forma segura
     const respuesta = {
       nombreCompleto: `${estudiante.usuario.nombre} ${estudiante.usuario.apellidoPaterno} ${estudiante.usuario.apellidoMaterno}`,
@@ -265,6 +381,9 @@ const getCredencial = async (req, res) => {
       emision: fechaEmisionFormateada,
       vigencia: fechaExpiracionFormateada,
       fotoUrl: estudiante.fotoUrl || null,
+      qrPayload,
+      qrBase64,
+      firmante,
     };
 
     // Imprimimos en la terminal del backend para verificar que sí manda los datos
@@ -289,7 +408,7 @@ const getHistorialAccesos = async (req, res) => {
       select: { idEstudiante: true },
     });
 
-    const accesos = await prisma.aceesos.findMany({
+    const accesos = await prisma.accesos.findMany({
       where: { alumnoId: estudiante.idEstudiante },
       orderBy: { fechaHora: "desc" },
       take: 20,
@@ -477,13 +596,230 @@ const cambiarContrasenia = async (req, res) => {
   }
 };
 
+const loginPadrePorAlumno = async (req, res) => {
+  try {
+    const { matricula, curp } = req.body;
+
+    const matriculaNormalizada = String(matricula || "").trim();
+    const curpNormalizada = String(curp || "")
+      .trim()
+      .toUpperCase();
+
+    if (!matriculaNormalizada || !curpNormalizada) {
+      return res
+        .status(400)
+        .json({ error: "Debes enviar matrícula y CURP del alumno" });
+    }
+
+    const estudiante = await prisma.estudiante.findFirst({
+      where: {
+        matricula: matriculaNormalizada,
+        usuario: {
+          curp: curpNormalizada,
+          activo: true,
+        },
+      },
+      include: {
+        usuario: {
+          select: {
+            nombre: true,
+            apellidoPaterno: true,
+            apellidoMaterno: true,
+          },
+        },
+        grupo: {
+          select: {
+            nombre: true,
+            grado: true,
+            turno: true,
+          },
+        },
+      },
+    });
+
+    if (!estudiante) {
+      return res.status(401).json({ error: "Datos de acceso inválidos" });
+    }
+
+    const tokenPadre = jwt.sign(
+      {
+        tipoAcceso: "PADRE",
+        alumnoId: estudiante.idEstudiante,
+      },
+      getJwtSecret(),
+      { expiresIn: "2h" },
+    );
+
+    return res.json({
+      ok: true,
+      mensaje: "Acceso de padre autorizado",
+      token: tokenPadre,
+      alumno: {
+        idEstudiante: estudiante.idEstudiante,
+        nombreCompleto:
+          `${estudiante.usuario.nombre} ${estudiante.usuario.apellidoPaterno} ${estudiante.usuario.apellidoMaterno || ""}`.trim(),
+        matricula: estudiante.matricula,
+        grupo: estudiante.grupo,
+      },
+    });
+  } catch (error) {
+    console.error("Error en login de padre:", error);
+    return res.status(500).json({ error: "Error interno del servidor" });
+  }
+};
+
+const getResumenAlumnoPadre = async (req, res) => {
+  try {
+    const alumnoId = req.usuario.alumnoId;
+
+    const estudiante = await prisma.estudiante.findUnique({
+      where: { idEstudiante: parseInt(alumnoId, 10) },
+      include: {
+        usuario: {
+          select: {
+            nombre: true,
+            apellidoPaterno: true,
+            apellidoMaterno: true,
+            curp: true,
+          },
+        },
+        grupo: {
+          include: {
+            especialidad: {
+              select: { nombre: true },
+            },
+          },
+        },
+      },
+    });
+
+    if (!estudiante) {
+      return res.status(404).json({ error: "Alumno no encontrado" });
+    }
+
+    return res.json({
+      idEstudiante: estudiante.idEstudiante,
+      matricula: estudiante.matricula,
+      nombreCompleto:
+        `${estudiante.usuario.nombre} ${estudiante.usuario.apellidoPaterno} ${estudiante.usuario.apellidoMaterno || ""}`.trim(),
+      curp: estudiante.usuario.curp,
+      grupo: estudiante.grupo,
+    });
+  } catch (error) {
+    console.error(error);
+    return res
+      .status(500)
+      .json({ error: "Error al obtener resumen del alumno" });
+  }
+};
+
+const getAsistenciasPadre = async (req, res) => {
+  try {
+    const alumnoId = req.usuario.alumnoId;
+    const { fechaInicio, fechaFin } = req.query;
+
+    const where = {
+      alumnoId: parseInt(alumnoId, 10),
+    };
+
+    if (fechaInicio || fechaFin) {
+      where.fecha = {};
+      if (fechaInicio) {
+        const inicio = new Date(fechaInicio);
+        inicio.setHours(0, 0, 0, 0);
+        where.fecha.gte = inicio;
+      }
+      if (fechaFin) {
+        const fin = new Date(fechaFin);
+        fin.setHours(23, 59, 59, 999);
+        where.fecha.lte = fin;
+      }
+    }
+
+    const asistencias = await prisma.asistencia.findMany({
+      where,
+      include: {
+        clase: {
+          include: {
+            materias: {
+              select: { nombre: true },
+            },
+          },
+        },
+      },
+      orderBy: { fecha: "desc" },
+    });
+
+    return res.json(
+      asistencias.map((a) => ({
+        idAsistencia: a.idAsistencia,
+        fecha: a.fecha,
+        estatus: a.estatus,
+        materia: a.clase?.materias?.nombre || "Sin materia",
+      })),
+    );
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Error al obtener asistencias" });
+  }
+};
+
+const getReportesPadre = async (req, res) => {
+  try {
+    const alumnoId = req.usuario.alumnoId;
+
+    const reportes = await prisma.reporte.findMany({
+      where: {
+        alumnoId: parseInt(alumnoId, 10),
+      },
+      include: {
+        docente: {
+          include: {
+            usuario: {
+              select: {
+                nombre: true,
+                apellidoPaterno: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { fecha: "desc" },
+    });
+
+    return res.json(
+      reportes.map((r) => ({
+        idReporte: r.idReporte,
+        titulo: r.titulo,
+        descripcion: r.descripcion,
+        tipoIncidencia: r.tipoIncidencia,
+        nivel: r.nivel,
+        estatus: r.estatus,
+        fecha: r.fecha,
+        accionesTomadas: r.accionesTomadas,
+        docente: r.docente
+          ? `${r.docente.usuario.nombre} ${r.docente.usuario.apellidoPaterno}`
+          : "Administración",
+      })),
+    );
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Error al obtener reportes" });
+  }
+};
+
 module.exports = {
   getAlumnosMovil,
   uploadFotiko,
   actualizartutor,
   getCredencial,
+  guardarDisenioCredencialMovil,
   getAsistencias,
   getHistorialAccesos,
   getReportesEstudianteMovil,
   cambiarContrasenia,
+  loginPadrePorAlumno,
+  getResumenAlumnoPadre,
+  getAsistenciasPadre,
+  getReportesPadre,
 };

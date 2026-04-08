@@ -6,13 +6,25 @@ const {
   getAccesos,
 } = require("../../controller/web/accesosController");
 
-const { verificarToken } = require("../../middlewares/authMiddleware");
+const { verificarToken, verificarRol } = require("../../middlewares/authMiddleware");
 const {
   bitacoraCrear,
   bitacoraConsultar,
 } = require("../../middlewares/bitacoraMiddleware");
 
-router.post("/", verificarToken, bitacoraCrear, registrarAcceso);
-router.get("/", verificarToken, bitacoraConsultar, getAccesos);
+router.post(
+  "/",
+  verificarToken,
+  verificarRol("GUARDIA", "PREFECTO", "ADMINISTRATIVO", "DIRECTIVO"),
+  bitacoraCrear,
+  registrarAcceso,
+);
+router.get(
+  "/",
+  verificarToken,
+  verificarRol("GUARDIA", "PREFECTO", "ADMINISTRATIVO", "DIRECTIVO"),
+  bitacoraConsultar,
+  getAccesos,
+);
 
 module.exports = router;

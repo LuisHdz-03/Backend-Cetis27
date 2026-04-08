@@ -78,10 +78,98 @@ const crearReporte = async (req, res) => {
 
 const getReporte = async (req, res) => {
   try {
-    const { estatus } = req.query;
+    const {
+      estatus,
+      alumnoId,
+      docenteId,
+      tipo,
+      nivel,
+      fechaInicio,
+      fechaFin,
+      busqueda,
+      reporteId,
+    } = req.query;
 
     const whereClause = {};
-    if (estatus) whereClause.estatus = estatus;
+
+    if (reporteId) {
+      const parsedReporteId = parseInt(reporteId, 10);
+      if (isNaN(parsedReporteId)) {
+        return res.status(400).json({ error: "reporteId inválido" });
+      }
+      whereClause.idReporte = parsedReporteId;
+    }
+
+    if (estatus) whereClause.estatus = String(estatus).toUpperCase();
+    if (tipo) whereClause.tipoIncidencia = String(tipo).toUpperCase();
+    if (nivel) whereClause.nivel = String(nivel).toUpperCase();
+
+    if (alumnoId) {
+      const parsedAlumnoId = parseInt(alumnoId, 10);
+      if (isNaN(parsedAlumnoId)) {
+        return res.status(400).json({ error: "alumnoId inválido" });
+      }
+      whereClause.alumnoId = parsedAlumnoId;
+    }
+
+    if (docenteId) {
+      const parsedDocenteId = parseInt(docenteId, 10);
+      if (isNaN(parsedDocenteId)) {
+        return res.status(400).json({ error: "docenteId inválido" });
+      }
+      whereClause.docenteId = parsedDocenteId;
+    }
+
+    if (fechaInicio || fechaFin) {
+      whereClause.fecha = {};
+      if (fechaInicio) {
+        const inicio = new Date(fechaInicio);
+        inicio.setHours(0, 0, 0, 0);
+        whereClause.fecha.gte = inicio;
+      }
+      if (fechaFin) {
+        const fin = new Date(fechaFin);
+        fin.setHours(23, 59, 59, 999);
+        whereClause.fecha.lte = fin;
+      }
+    }
+
+    if (busqueda) {
+      const valorBusqueda = String(busqueda).trim();
+      whereClause.OR = [
+        { titulo: { contains: valorBusqueda, mode: "insensitive" } },
+        { descripcion: { contains: valorBusqueda, mode: "insensitive" } },
+        {
+          alumno: {
+            matricula: { contains: valorBusqueda, mode: "insensitive" },
+          },
+        },
+        {
+          alumno: {
+            usuario: {
+              curp: { contains: valorBusqueda, mode: "insensitive" },
+            },
+          },
+        },
+        {
+          alumno: {
+            usuario: {
+              nombre: { contains: valorBusqueda, mode: "insensitive" },
+            },
+          },
+        },
+        {
+          alumno: {
+            usuario: {
+              apellidoPaterno: {
+                contains: valorBusqueda,
+                mode: "insensitive",
+              },
+            },
+          },
+        },
+      ];
+    }
 
     const reportes = await prisma.reporte.findMany({
       where: whereClause,
@@ -126,6 +214,46 @@ const getReporte = async (req, res) => {
   } catch (error) {
     console.error("Error en getReporte:", error);
     res.status(500).json({ error: "Error al obtener los reportes" });
+  }
+};
+
+const getDocentesParaReporte = async (req, res) => {
+  try {
+    const docentes = await prisma.docente.findMany({
+      where: {
+        usuario: {
+          activo: true,
+        },
+      },
+      include: {
+        usuario: {
+          select: {
+            nombre: true,
+            apellidoPaterno: true,
+            apellidoMaterno: true,
+          },
+        },
+      },
+      orderBy: {
+        usuario: {
+          apellidoPaterno: "asc",
+        },
+      },
+    });
+
+    const lista = docentes.map((d) => ({
+      idDocente: d.idDocente,
+      numeroEmpleado: d.numeroEmpleado,
+      nombreCompleto:
+        `${d.usuario.nombre} ${d.usuario.apellidoPaterno} ${d.usuario.apellidoMaterno || ""}`.trim(),
+    }));
+
+    return res.json(lista);
+  } catch (error) {
+    console.error(error);
+    return res
+      .status(500)
+      .json({ error: "Error al obtener lista de docentes" });
   }
 };
 
@@ -177,4 +305,5 @@ module.exports = {
   getReporte,
   atenderReporte,
   getHistorialAlumno,
+  getDocentesParaReporte,
 };

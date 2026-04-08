@@ -1,8 +1,14 @@
 const jwt = require("jsonwebtoken");
+const prisma = require("../config/prisma");
 
-const JWT_SECRET = "cetis27_secret_key_2026";
+const getJwtSecret = () => {
+  if (!process.env.JWT_SECRET) {
+    throw new Error("JWT_SECRET no está configurada en variables de entorno");
+  }
+  return process.env.JWT_SECRET;
+};
 
-const verificarToken = (req, res, next) => {
+const verificarToken = async (req, res, next) => {
   const authHeader = req.headers["authorization"];
 
   if (!authHeader) {
@@ -16,14 +22,97 @@ const verificarToken = (req, res, next) => {
   if (!token) {
     return res.status(403).json({ error: "Formato de token invalido" });
   }
-  jwt.verify(token, JWT_SECRET, (err, decoded) => {
-    if (err) {
-      return res.status(401).json({ error: "Token invalido o expirado" });
+
+  try {
+    const decoded = jwt.verify(token, getJwtSecret());
+
+    const usuarioActual = await prisma.usuario.findUnique({
+      where: { idUsuario: parseInt(decoded.id, 10) },
+      select: {
+        idUsuario: true,
+        rol: true,
+        activo: true,
+        nombre: true,
+      },
+    });
+
+    if (!usuarioActual) {
+      return res.status(401).json({ error: "Token inválido: usuario no existe" });
     }
-    req.usuario = decoded;
+
+    if (!usuarioActual.activo) {
+      return res.status(403).json({ error: "Cuenta desactivada" });
+    }
+
+    if ((decoded.rol || "").toUpperCase() !== usuarioActual.rol.toUpperCase()) {
+      return res.status(401).json({
+        error: "Sesión desactualizada por cambio de permisos. Inicia sesión nuevamente.",
+      });
+    }
+
+    req.usuario = {
+      ...decoded,
+      id: usuarioActual.idUsuario,
+      rol: usuarioActual.rol,
+      nombre: usuarioActual.nombre,
+      activo: usuarioActual.activo,
+    };
 
     next();
-  });
+  } catch (err) {
+    if (err.name === "TokenExpiredError" || err.name === "JsonWebTokenError") {
+      return res.status(401).json({ error: "Token invalido o expirado" });
+    }
+
+    console.error("Error validando token:", err);
+    return res.status(500).json({ error: "Error interno al validar autenticación" });
+  }
+};
+
+const verificarTokenPadre = async (req, res, next) => {
+  const authHeader = req.headers["authorization"];
+
+  if (!authHeader) {
+    return res.status(403).json({ error: "Error, no hay token" });
+  }
+
+  const token = authHeader.startsWith("Bearer ")
+    ? authHeader.slice(7, authHeader.length)
+    : authHeader;
+
+  if (!token) {
+    return res.status(403).json({ error: "Formato de token inválido" });
+  }
+
+  try {
+    const decoded = jwt.verify(token, getJwtSecret());
+
+    if (!decoded || decoded.tipoAcceso !== "PADRE") {
+      return res.status(403).json({ error: "Token no autorizado para acceso de padre" });
+    }
+
+    const estudiante = await prisma.estudiante.findUnique({
+      where: { idEstudiante: parseInt(decoded.alumnoId, 10) },
+      include: {
+        usuario: { select: { activo: true } },
+      },
+    });
+
+    if (!estudiante || !estudiante.usuario?.activo) {
+      return res.status(401).json({
+        error: "Acceso de padre inválido: alumno no disponible o inactivo",
+      });
+    }
+
+    req.usuario = decoded;
+    next();
+  } catch (err) {
+    if (err.name === "TokenExpiredError" || err.name === "JsonWebTokenError") {
+      return res.status(401).json({ error: "Token inválido o expirado" });
+    }
+    console.error("Error validando token de padre:", err);
+    return res.status(500).json({ error: "Error interno al validar autenticación" });
+  }
 };
 const soloAdmin = (req, res, next) => {
   if (req.usuario.rol !== "ADMINISTRATIVO" && req.usuario.rol !== "DIRECTIVO") {
@@ -97,6 +186,7 @@ const docenteODirectivo = verificarRol("DOCENTE", "DIRECTIVO");
 
 module.exports = {
   verificarToken,
+  verificarTokenPadre,
   soloAdmin,
   verificarRol,
   verificarActivo,

@@ -105,7 +105,8 @@ const crearEstudiante = async (req, res) => {
       credenciales: {
         username: resultado.usuario.username,
         password_inicial: passwordInicial,
-        aviso: "El usuario debe cambiar la contraseña en el primer inicio de sesión.",
+        aviso:
+          "El usuario debe cambiar la contraseña en el primer inicio de sesión.",
       },
     });
   } catch (error) {
@@ -194,9 +195,12 @@ const cargarDatosMasivos = async (req, res) => {
 
       const matriculaLimpia = limpiarMatricula(matriculaExcel);
       const fechaNac = extraerFechaDesdeCURP(curpExcel);
-      const usernameGenerado = curpExcel.trim().toLowerCase();
+      const usernameGenerado = matriculaLimpia;
+      const passwordInicial = extraerFechaPasswordDesdeCURP(curpExcel);
       const emailExcel = fila["EMAIL"];
-      const emailNormalizado = emailExcel ? String(emailExcel).trim().toLowerCase() : null;
+      const emailNormalizado = emailExcel
+        ? String(emailExcel).trim().toLowerCase()
+        : null;
 
       const turnoQuery = fila["TURNO"]
         ? fila["TURNO"].toUpperCase()
@@ -210,9 +214,6 @@ const cargarDatosMasivos = async (req, res) => {
             especialidad: {
               nombre: fila["CARRERA"],
             },
-            periodo: {
-              activo: true,
-            },
           },
         });
 
@@ -225,7 +226,7 @@ const cargarDatosMasivos = async (req, res) => {
         }
 
         const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(matriculaLimpia, salt);
+        const hashedPassword = await bcrypt.hash(passwordInicial, salt);
 
         await prisma.$transaction(async (tx) => {
           const estudianteExistente = await tx.estudiante.findUnique({
@@ -296,6 +297,7 @@ const cargarDatosMasivos = async (req, res) => {
                 password: hashedPassword,
                 rol: "ALUMNO",
                 activo: true,
+                passwordChangeRequired: true,
               },
             });
 
@@ -435,7 +437,11 @@ const actualizarEstudiante = async (req, res) => {
         dataUsuario.apellidoMaterno = apellidoMaterno;
       if (curp !== undefined) {
         dataUsuario.curp = curp.trim().toUpperCase();
-        dataUsuario.username = curp.trim().toLowerCase();
+        const matriculaParaUsername =
+          matricula !== undefined
+            ? limpiarMatricula(matricula)
+            : estudianteExistente.matricula;
+        dataUsuario.username = matriculaParaUsername;
       }
       if (email !== undefined)
         dataUsuario.email = email ? email.trim().toLowerCase() : null;
@@ -553,6 +559,47 @@ const getEstudiantesPorGrupo = async (req, res) => {
   }
 };
 
+const descargarPlantillaEstudiantes = async (req, res) => {
+  try {
+    const filasEjemplo = [
+      {
+        CARRERA: "PROGRAMACION",
+        TURNO: "MATUTINO",
+        SEMESTRE: 4,
+        GRUPO: "4A",
+        "NO CONTROL": "22603061070031",
+        NOMBRE: "JUAN",
+        PATERNO: "PEREZ",
+        MATERNO: "LOPEZ",
+        CURP: "PELJ080101HDFRPN01",
+        EMAIL: "alumno@correo.com",
+      },
+    ];
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(filasEjemplo);
+    XLSX.utils.book_append_sheet(wb, ws, "Plantilla_Estudiantes");
+
+    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    res.setHeader(
+      "Content-Disposition",
+      'attachment; filename="plantilla_estudiantes.xlsx"',
+    );
+
+    return res.send(buffer);
+  } catch (error) {
+    console.error("Error al generar plantilla de estudiantes:", error);
+    return res
+      .status(500)
+      .json({ error: "Error al generar plantilla de estudiantes" });
+  }
+};
+
 module.exports = {
   crearEstudiante,
   getEstudiantes,
@@ -560,4 +607,5 @@ module.exports = {
   actualizarEstudiante,
   eliminarEstudiante,
   getEstudiantesPorGrupo,
+  descargarPlantillaEstudiantes,
 };

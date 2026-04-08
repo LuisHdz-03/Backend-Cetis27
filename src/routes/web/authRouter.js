@@ -4,21 +4,36 @@ const router = Router();
 const {
   login,
   cambiarPassword,
+  cambiarPasswordObligatorio,
+  solicitarRecuperacionPassword,
+  restablecerPasswordConToken,
+  getMiPerfil,
+  registrarCorreo,
 } = require("../../controller/auth/authController");
 
 const { verificarToken } = require("../../middlewares/authMiddleware");
 const {
-  bitacoraLogin,
   bitacoraActualizar,
+  bitacoraConsultar,
 } = require("../../middlewares/bitacoraMiddleware");
-const { loginLimiter } = require("../../middlewares/rateLimitMiddleware");
+const { loginLimiter, passwordRecoveryLimiter } = require("../../middlewares/rateLimitMiddleware");
 
-router.post("/login", loginLimiter, bitacoraLogin, login);
+router.post("/login", loginLimiter, login);
+router.post("/olvide-password", passwordRecoveryLimiter, solicitarRecuperacionPassword);
+router.post("/restablecer-password", passwordRecoveryLimiter, restablecerPasswordConToken);
 router.put(
   "/cambiar-password",
   verificarToken,
   bitacoraActualizar,
   cambiarPassword,
 );
+router.put(
+  "/cambiar-password-obligatorio",
+  verificarToken,
+  bitacoraActualizar,
+  cambiarPasswordObligatorio,
+);
+router.get("/mi-perfil", verificarToken, bitacoraConsultar, getMiPerfil);
+router.put("/registrar-correo", verificarToken, bitacoraActualizar, registrarCorreo);
 
 module.exports = router;

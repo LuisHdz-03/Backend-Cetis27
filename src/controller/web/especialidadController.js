@@ -190,10 +190,53 @@ const cargarEspecialidadesMasivas = async (req, res) => {
   }
 };
 
+const descargarPlantillaEspecialidades = async (req, res) => {
+  try {
+    const filasEjemplo = [
+      {
+        NOMBRE: "PROGRAMACION",
+        CODIGO: "PROG",
+        DESCRIPCION: "Especialidad de desarrollo de software",
+      },
+    ];
+
+    const instrucciones = [
+      { CAMPO: "NOMBRE", DESCRIPCION: "Nombre de especialidad (obligatorio)" },
+      { CAMPO: "CODIGO", DESCRIPCION: "Codigo unico de especialidad (obligatorio)" },
+      { CAMPO: "DESCRIPCION", DESCRIPCION: "Descripcion (opcional)" },
+    ];
+
+    const wb = XLSX.utils.book_new();
+    const wsEjemplo = XLSX.utils.json_to_sheet(filasEjemplo);
+    const wsInstrucciones = XLSX.utils.json_to_sheet(instrucciones);
+    XLSX.utils.book_append_sheet(wb, wsEjemplo, "Plantilla_Especialidades");
+    XLSX.utils.book_append_sheet(wb, wsInstrucciones, "Instrucciones");
+
+    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    res.setHeader(
+      "Content-Disposition",
+      'attachment; filename="plantilla_especialidades.xlsx"',
+    );
+
+    return res.send(buffer);
+  } catch (error) {
+    console.error("Error al generar plantilla de especialidades:", error);
+    return res
+      .status(500)
+      .json({ error: "Error al generar plantilla de especialidades" });
+  }
+};
+
 module.exports = {
   crearEspecialidad,
   getEspecialidad,
   actualizarEspecialidad,
   eliminarEspecialidad,
   cargarEspecialidadesMasivas,
+  descargarPlantillaEspecialidades,
 };

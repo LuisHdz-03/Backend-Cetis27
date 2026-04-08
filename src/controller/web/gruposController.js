@@ -1,6 +1,22 @@
 const prisma = require("../../config/prisma");
 const XLSX = require("xlsx");
 
+const validarAulaEnCatalogo = async (aula) => {
+  if (!aula) return true;
+
+  const espacio = await prisma.espacio.findFirst({
+    where: {
+      nombre: {
+        equals: String(aula).trim(),
+        mode: "insensitive",
+      },
+      activo: true,
+    },
+  });
+
+  return Boolean(espacio);
+};
+
 const crearGrupo = async (req, res) => {
   try {
     const {
@@ -24,6 +40,16 @@ const crearGrupo = async (req, res) => {
       return res
         .status(400)
         .json({ error: "Falta ID del Docente Tutor del grupo" });
+    }
+
+    if (aula) {
+      const aulaValida = await validarAulaEnCatalogo(aula);
+      if (!aulaValida) {
+        return res.status(400).json({
+          error:
+            "El aula/espacio enviado no existe en el catálogo activo. Regístralo primero en el apartado de espacios.",
+        });
+      }
     }
 
     const nuevoGrupo = await prisma.$transaction(async (tx) => {
@@ -289,6 +315,16 @@ const actualizarGrupo = async (req, res) => {
       }
     }
 
+    if (aula !== undefined && aula !== null && String(aula).trim() !== "") {
+      const aulaValida = await validarAulaEnCatalogo(aula);
+      if (!aulaValida) {
+        return res.status(400).json({
+          error:
+            "El aula/espacio enviado no existe en el catálogo activo. Regístralo primero en el apartado de espacios.",
+        });
+      }
+    }
+
     const dataActualizar = {};
     if (nombre !== undefined) dataActualizar.nombre = String(nombre).trim();
     if (grado !== undefined) dataActualizar.grado = parseInt(grado, 10);
@@ -308,20 +344,20 @@ const actualizarGrupo = async (req, res) => {
         include: {
           docenteTutor: {
             include: {
-              usuario: { 
-                select: { 
-                  nombre: true, 
-                  apellidoPaterno: true, 
+              usuario: {
+                select: {
+                  nombre: true,
+                  apellidoPaterno: true,
                   apellidoMaterno: true,
-                  username: true
-                } 
+                  username: true,
+                },
               },
             },
           },
           especialidad: {
-            select: { nombre: true, codigo: true }
-          }
-        }
+            select: { nombre: true, codigo: true },
+          },
+        },
       });
 
       if (materiasIds !== undefined && Array.isArray(materiasIds)) {
@@ -392,11 +428,20 @@ const cargarGruposMasivos = async (req, res) => {
       const turno = fila["TURNO"];
       const aula = fila["AULA"];
       const especialidadNombre = fila["ESPECIALIDAD"];
+      const docenteTutorNumEmpleado = fila["DOCENTE_TUTOR_NUM_EMPLEADO"];
 
       if (!nombre || !grado || !turno || !especialidadNombre) {
         errores.push({
           registro: nombre || "Desconocido",
           error: "Faltan columnas (NOMBRE, GRADO, TURNO o ESPECIALIDAD)",
+        });
+        continue;
+      }
+
+      if (!docenteTutorNumEmpleado) {
+        errores.push({
+          registro: nombre || "Desconocido",
+          error: "Falta la columna DOCENTE_TUTOR_NUM_EMPLEADO (obligatoria)",
         });
         continue;
       }
@@ -408,6 +453,17 @@ const cargarGruposMasivos = async (req, res) => {
           error: `Turno inválido: ${turno}. Debe ser MATUTINO, VESPERTINO o MIXTO`,
         });
         continue;
+      }
+
+      if (aula) {
+        const aulaValida = await validarAulaEnCatalogo(aula);
+        if (!aulaValida) {
+          errores.push({
+            registro: nombre,
+            error: `El aula/espacio '${aula}' no existe en el catálogo activo`,
+          });
+          continue;
+        }
       }
 
       try {
@@ -428,6 +484,24 @@ const cargarGruposMasivos = async (req, res) => {
           continue;
         }
 
+        const docenteTutorExiste = await prisma.docente.findFirst({
+          where: {
+            numeroEmpleado: {
+              equals: String(docenteTutorNumEmpleado).trim(),
+              mode: "insensitive",
+            },
+          },
+          select: { idDocente: true },
+        });
+
+        if (!docenteTutorExiste) {
+          errores.push({
+            registro: nombre,
+            error: `No existe docente tutor con número de empleado '${docenteTutorNumEmpleado}'`,
+          });
+          continue;
+        }
+
         // Buscamos sin periodoId
         const grupoExistente = await prisma.grupo.findFirst({
           where: {
@@ -443,6 +517,8 @@ const cargarGruposMasivos = async (req, res) => {
             grupoUpdate.turno = turnoNormalizado;
           if ((aula ? String(aula).trim() : null) !== grupoExistente.aula)
             grupoUpdate.aula = aula ? String(aula).trim() : null;
+          if (grupoExistente.docenteTutorId !== docenteTutorExiste.idDocente)
+            grupoUpdate.docenteTutorId = docenteTutorExiste.idDocente;
 
           if (Object.keys(grupoUpdate).length > 0) {
             await prisma.grupo.update({
@@ -459,6 +535,7 @@ const cargarGruposMasivos = async (req, res) => {
               turno: turnoNormalizado,
               aula: aula ? String(aula).trim() : null,
               especialidadId: especialidadExiste.idEspecialidad,
+              docenteTutorId: docenteTutorExiste.idDocente,
             },
           });
           datosInsertados.push(nuevoGrupo.nombre);
@@ -485,6 +562,65 @@ const cargarGruposMasivos = async (req, res) => {
   }
 };
 
+const descargarPlantillaGrupos = async (req, res) => {
+  try {
+    const filasEjemplo = [
+      {
+        NOMBRE: "4A",
+        GRADO: 4,
+        TURNO: "MATUTINO",
+        AULA: "A-101",
+        ESPECIALIDAD: "PROGRAMACION",
+        DOCENTE_TUTOR_NUM_EMPLEADO: "DOC001",
+      },
+    ];
+
+    const instrucciones = [
+      { CAMPO: "NOMBRE", DESCRIPCION: "Nombre del grupo (obligatorio)" },
+      { CAMPO: "GRADO", DESCRIPCION: "Grado del grupo en numero (obligatorio)" },
+      { CAMPO: "TURNO", DESCRIPCION: "MATUTINO, VESPERTINO o MIXTO (obligatorio)" },
+      {
+        CAMPO: "AULA",
+        DESCRIPCION:
+          "Nombre del aula/espacio (debe existir en catálogo de espacios activos)",
+      },
+      {
+        CAMPO: "ESPECIALIDAD",
+        DESCRIPCION: "Nombre de la especialidad (obligatorio)",
+      },
+      {
+        CAMPO: "DOCENTE_TUTOR_NUM_EMPLEADO",
+        DESCRIPCION:
+          "Numero de empleado del docente tutor (obligatorio, sin ID)",
+      },
+    ];
+
+    const wb = XLSX.utils.book_new();
+    const wsEjemplo = XLSX.utils.json_to_sheet(filasEjemplo);
+    const wsInstrucciones = XLSX.utils.json_to_sheet(instrucciones);
+    XLSX.utils.book_append_sheet(wb, wsEjemplo, "Plantilla_Grupos");
+    XLSX.utils.book_append_sheet(wb, wsInstrucciones, "Instrucciones");
+
+    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    res.setHeader(
+      "Content-Disposition",
+      'attachment; filename="plantilla_grupos.xlsx"',
+    );
+
+    return res.send(buffer);
+  } catch (error) {
+    console.error("Error al generar plantilla de grupos:", error);
+    return res
+      .status(500)
+      .json({ error: "Error al generar plantilla de grupos" });
+  }
+};
+
 module.exports = {
   crearGrupo,
   getGrupos,
@@ -492,4 +628,5 @@ module.exports = {
   actualizarGrupo,
   eliminarGrupo,
   cargarGruposMasivos,
+  descargarPlantillaGrupos,
 };

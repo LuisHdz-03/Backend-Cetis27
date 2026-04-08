@@ -9,6 +9,7 @@ router.get("/", (req, res) => {
 
 // Autenticación
 router.use("/auth", require("./authRouter"));
+router.use("/padres", require("./padresRoute"));
 
 router.use(verificarToken);
 
@@ -21,6 +22,7 @@ router.use("/materias", require("./materiasRoute"));
 router.use("/clases", require("./claseRoute"));
 router.use("/periodos", require("./periodosRouter"));
 router.use("/especialidades", require("./especialidadRoute"));
+router.use("/espacios", require("./espaciosRoute"));
 
 // Gestión Diaria
 router.use("/asistencias", require("./asistenciaRoute"));

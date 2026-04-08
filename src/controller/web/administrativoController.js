@@ -13,7 +13,6 @@ const limpiarMatricula = (valor) => {
     }
   }
 
-  // Si es un texto normal, lo devuelve intacto
   return numStr;
 };
 
@@ -32,7 +31,6 @@ const extraerFechaDesdeCURP = (curp) => {
   }
 };
 
-// Función para extraer fecha en formato AA/MM/DD desde CURP (para password inicial)
 const extraerFechaPasswordDesdeCURP = (curp) => {
   if (!curp || curp.length < 10) return null;
   try {
@@ -45,16 +43,78 @@ const extraerFechaPasswordDesdeCURP = (curp) => {
   }
 };
 
-// Cargos permitidos para personal administrativo
-const cargosPermitidos = [
-  "DIRECTOR",
-  "SUBDIRECTORA ACADEMICA",
-  "COORDINADOR",
-  "JEFE DE DEPARTAMENTO",
-  "SECRETARIO",
-  "TESORERO",
-  "PREFECTO",
+const normalizarTexto = (valor) =>
+  String(valor || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toUpperCase();
+
+const cargosFront = [
+  "Director",
+  "Subdirector Académica",
+  "Coordinador",
+  "Jefe de Departamento",
+  "Secretario",
+  "Prefecto",
 ];
+
+const cargosPermitidos = cargosFront.map((c) => normalizarTexto(c));
+
+const cargoParaMostrar = {
+  DIRECTOR: "Director",
+  "SUBDIRECTORA ACADEMICA": "Subdirectora Académica",
+  COORDINADOR: "Coordinador",
+  "JEFE DE DEPARTAMENTO": "Jefe de Departamento",
+  SECRETARIO: "Secretario",
+  PREFECTO: "Prefecto",
+};
+
+const rolPorCargo = {
+  DIRECTOR: "DIRECTIVO",
+  "SUBDIRECTORA ACADEMICA": "DIRECTIVO",
+  COORDINADOR: "ADMINISTRATIVO",
+  "JEFE DE DEPARTAMENTO": "ADMINISTRATIVO",
+  SECRETARIO: "ADMINISTRATIVO",
+  PREFECTO: "PREFECTO",
+};
+
+const normalizarCargo = (cargo) => {
+  const cargoNormalizado = normalizarTexto(cargo);
+  return cargosPermitidos.includes(cargoNormalizado) ? cargoNormalizado : null;
+};
+
+const obtenerRolDesdeCargo = (cargoNormalizado) =>
+  rolPorCargo[cargoNormalizado] || "ADMINISTRATIVO";
+
+const validarDirectorUnicoActivo = async (
+  tx,
+  cargoNormalizado,
+  excludeAdminId = null,
+) => {
+  if (cargoNormalizado !== "DIRECTOR") return;
+
+  const whereDirector = {
+    cargo: "DIRECTOR",
+    usuario: { activo: true },
+  };
+
+  if (excludeAdminId) {
+    whereDirector.idAdministrativo = { not: excludeAdminId };
+  }
+
+  const directorActivo = await tx.administrativo.findFirst({
+    where: whereDirector,
+    select: { idAdministrativo: true },
+  });
+
+  if (directorActivo) {
+    const error = new Error("DIRECTOR_ACTIVO_DUPLICADO");
+    error.code = "DIRECTOR_ACTIVO_DUPLICADO";
+    throw error;
+  }
+};
 
 // controladores
 
@@ -69,27 +129,19 @@ const crearAdministrativo = async (req, res) => {
       cargo,
       area,
       numeroEmpleado,
-      rol,
       email,
       telefono,
     } = req.body;
 
-    const rolesPermitidos = ["ADMINISTRATIVO", "DIRECTIVO", "GUARDIA"];
-    const rolAsignar = rol ? rol.toUpperCase() : "ADMINISTRATIVO";
-
-    if (!rolesPermitidos.includes(rolAsignar)) {
-      return res.status(400).json({
-        error: `El rol '${rolAsignar}' no es válido. Usa: ${rolesPermitidos.join(", ")}`,
-      });
-    }
-
     // Validar cargo permitido
-    const cargoNormalizado = cargo.trim().toUpperCase();
-    if (!cargosPermitidos.includes(cargoNormalizado)) {
+    const cargoNormalizado = normalizarCargo(cargo);
+    if (!cargoNormalizado) {
       return res.status(400).json({
-        error: `El cargo '${cargo}' no es válido. Cargos permitidos: ${cargosPermitidos.join(", ")}`,
+        error: `El cargo '${cargo}' no es válido. Cargos permitidos: ${cargosFront.join(", ")}`,
       });
     }
+
+    const rolAsignar = obtenerRolDesdeCargo(cargoNormalizado);
 
     const numEmpleadoLimpio = limpiarMatricula(numeroEmpleado);
     const fechaNac = extraerFechaDesdeCURP(curp);
@@ -101,6 +153,8 @@ const crearAdministrativo = async (req, res) => {
     const hashedPassword = await bcrypt.hash(passwordInicial, salt);
 
     const nuevoAdmin = await prisma.$transaction(async (tx) => {
+      await validarDirectorUnicoActivo(tx, cargoNormalizado);
+
       const usuario = await tx.usuario.create({
         data: {
           nombre,
@@ -132,7 +186,7 @@ const crearAdministrativo = async (req, res) => {
 
     res.status(201).json({
       ok: true,
-      mensaje: `Personal registrado correctamente como ${rolAsignar}`,
+      mensaje: `Personal registrado correctamente como ${rolAsignar} (${cargoParaMostrar[cargoNormalizado] || cargoNormalizado})`,
       credenciales: {
         username: nuevoAdmin.usuario.username,
         password_inicial: passwordInicial,
@@ -183,7 +237,7 @@ const getAdministrativos = async (req, res) => {
       telefono: a.usuario.telefono,
       curp: a.usuario.curp,
       email: a.usuario.email,
-      cargo: a.cargo,
+      cargo: cargoParaMostrar[a.cargo] || a.cargo,
       area: a.area,
       numeroEmpleado: a.numeroEmpleado,
       rol: a.usuario.rol,
@@ -232,29 +286,29 @@ const cargarAdministrativosMasivos = async (req, res) => {
       }
 
       // Validar cargo permitido
-      const cargoNormalizado = String(cargoExcel).trim().toUpperCase();
-      if (!cargosPermitidos.includes(cargoNormalizado)) {
+      const cargoNormalizado = normalizarCargo(cargoExcel);
+      if (!cargoNormalizado) {
         errores.push({
           numeroEmpleado: numEmpleadoExcel,
-          error: `Cargo inválido: '${cargoExcel}'. Cargos permitidos: ${cargosPermitidos.join(", ")}`,
+          error: `Cargo inválido: '${cargoExcel}'. Cargos permitidos: ${cargosFront.join(", ")}`,
         });
         continue;
       }
 
+      const rolAsignar = obtenerRolDesdeCargo(cargoNormalizado);
+
       try {
         const numEmpleadoLimpio = limpiarMatricula(numEmpleadoExcel);
         const fechaNac = extraerFechaDesdeCURP(curpExcel);
-        const usernameGenerado = curpExcel.trim().toLowerCase();
+        const usernameGenerado = numEmpleadoLimpio;
+        const passwordInicial = extraerFechaPasswordDesdeCURP(curpExcel);
         const emailExcel = fila["EMAIL"];
         const emailNormalizado = emailExcel
           ? String(emailExcel).trim().toLowerCase()
           : null;
 
         const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(
-          String(numEmpleadoLimpio),
-          salt,
-        );
+        const hashedPassword = await bcrypt.hash(passwordInicial, salt);
 
         await prisma.$transaction(async (tx) => {
           // Buscar si ya existe un administrativo con ese número de empleado
@@ -264,6 +318,16 @@ const cargarAdministrativosMasivos = async (req, res) => {
           });
 
           if (administrativoExistente) {
+            const rolActualizado = obtenerRolDesdeCargo(cargoNormalizado);
+
+            if (cargoNormalizado === "DIRECTOR") {
+              await validarDirectorUnicoActivo(
+                tx,
+                cargoNormalizado,
+                administrativoExistente.idAdministrativo,
+              );
+            }
+
             // Si existe, actualizar solo los campos que sean diferentes
             const usuarioUpdate = {};
             if (nombreExcel !== administrativoExistente.usuario.nombre)
@@ -293,6 +357,8 @@ const cargarAdministrativosMasivos = async (req, res) => {
                 administrativoExistente.usuario.fechaNacimiento?.getTime()
             )
               usuarioUpdate.fechaNacimiento = fechaNac;
+            if (administrativoExistente.usuario.rol !== rolActualizado)
+              usuarioUpdate.rol = rolActualizado;
 
             // Actualizar usuario si hay cambios
             if (Object.keys(usuarioUpdate).length > 0) {
@@ -319,6 +385,8 @@ const cargarAdministrativosMasivos = async (req, res) => {
             }
           } else {
             // Si no existe, crear nuevo
+            await validarDirectorUnicoActivo(tx, cargoNormalizado);
+
             const nuevoUsuario = await tx.usuario.create({
               data: {
                 nombre: nombreExcel,
@@ -329,8 +397,9 @@ const cargarAdministrativosMasivos = async (req, res) => {
                 curp: curpExcel.trim().toUpperCase(),
                 fechaNacimiento: fechaNac,
                 password: hashedPassword,
-                rol: "ADMINISTRATIVO",
+                rol: rolAsignar,
                 activo: true,
+                passwordChangeRequired: true,
               },
             });
 
@@ -351,6 +420,8 @@ const cargarAdministrativosMasivos = async (req, res) => {
         let msg = "Error al procesar la fila";
         if (error.code === "P2002")
           msg = "Dato duplicado (CURP/Username/Email/Num Empleado)";
+        if (error.code === "DIRECTOR_ACTIVO_DUPLICADO")
+          msg = "No puede existir más de un Director activo";
         errores.push({ numeroEmpleado: numEmpleadoExcel, error: msg });
       }
     }
@@ -430,16 +501,24 @@ const actualizarAdministrativo = async (req, res) => {
 
     // Validar cargo si se proporciona
     if (cargo) {
-      const cargoNormalizado = cargo.trim().toUpperCase();
-      if (!cargosPermitidos.includes(cargoNormalizado)) {
+      const cargoNormalizado = normalizarCargo(cargo);
+      if (!cargoNormalizado) {
         return res.status(400).json({
-          error: `El cargo '${cargo}' no es válido. Cargos permitidos: ${cargosPermitidos.join(", ")}`,
+          error: `El cargo '${cargo}' no es válido. Cargos permitidos: ${cargosFront.join(", ")}`,
         });
       }
     }
 
     // Actualizar en transacción
     const actualizado = await prisma.$transaction(async (tx) => {
+      const cargoResultante = cargo ? normalizarCargo(cargo) : admin.cargo;
+      const activoResultante =
+        activo !== undefined ? Boolean(activo) : admin.usuario.activo;
+
+      if (cargoResultante === "DIRECTOR" && activoResultante) {
+        await validarDirectorUnicoActivo(tx, cargoResultante, adminId);
+      }
+
       // Actualizar usuario si hay cambios
       const usuarioData = {};
       if (nombre !== undefined) usuarioData.nombre = nombre;
@@ -449,12 +528,17 @@ const actualizarAdministrativo = async (req, res) => {
         usuarioData.apellidoMaterno = apellidoMaterno;
       if (curp !== undefined) {
         usuarioData.curp = curp.trim().toUpperCase();
-        usuarioData.username = curp.trim().toLowerCase();
+        const numeroEmpleadoParaUsername = numeroEmpleado
+          ? limpiarMatricula(numeroEmpleado)
+          : admin.numeroEmpleado;
+        usuarioData.username = numeroEmpleadoParaUsername;
       }
       if (email !== undefined)
         usuarioData.email = email ? email.trim().toLowerCase() : null;
       if (telefono !== undefined) usuarioData.telefono = telefono;
       if (activo !== undefined) usuarioData.activo = activo;
+      if (cargo !== undefined)
+        usuarioData.rol = obtenerRolDesdeCargo(cargoResultante);
 
       let usuarioActualizado = admin.usuario;
       if (Object.keys(usuarioData).length > 0) {
@@ -466,7 +550,7 @@ const actualizarAdministrativo = async (req, res) => {
 
       // Actualizar administrativo si hay cambios
       const adminData = {};
-      if (cargo !== undefined) adminData.cargo = cargo.trim().toUpperCase();
+      if (cargo !== undefined) adminData.cargo = cargoResultante;
       if (area !== undefined) adminData.area = area;
       if (numeroEmpleado !== undefined)
         adminData.numeroEmpleado = limpiarMatricula(numeroEmpleado);
@@ -489,6 +573,13 @@ const actualizarAdministrativo = async (req, res) => {
     });
   } catch (error) {
     console.error("Error al actualizar administrador:", error);
+
+    if (error.code === "DIRECTOR_ACTIVO_DUPLICADO") {
+      return res.status(400).json({
+        ok: false,
+        error: "No puede existir más de un Director activo",
+      });
+    }
 
     if (error.code === "P2002") {
       return res.status(400).json({
@@ -559,6 +650,65 @@ const eliminarAdministrativo = async (req, res) => {
   }
 };
 
+const descargarPlantillaAdministrativos = async (req, res) => {
+  try {
+    const filasEjemplo = [
+      {
+        "NUM EMPLEADO": "ADM001",
+        NOMBRE: "LUIS",
+        PATERNO: "HERNANDEZ",
+        MATERNO: "RAMIREZ",
+        CURP: "HERL820101HDFRMN01",
+        CARGO: "COORDINADOR",
+        AREA: "Control Escolar",
+        EMAIL: "admin@correo.com",
+      },
+    ];
+
+    const instrucciones = [
+      {
+        CAMPO: "NUM EMPLEADO",
+        DESCRIPCION: "Numero de empleado (obligatorio)",
+      },
+      { CAMPO: "NOMBRE", DESCRIPCION: "Nombre (obligatorio)" },
+      { CAMPO: "PATERNO", DESCRIPCION: "Apellido paterno (opcional)" },
+      { CAMPO: "MATERNO", DESCRIPCION: "Apellido materno (opcional)" },
+      { CAMPO: "CURP", DESCRIPCION: "CURP (obligatorio)" },
+      {
+        CAMPO: "CARGO",
+        DESCRIPCION:
+          "Cargo permitido: Director, Subdirectora Académica, Coordinador, Jefe de Departamento, Secretario, Prefecto",
+      },
+      { CAMPO: "AREA", DESCRIPCION: "Area de trabajo (obligatorio)" },
+      { CAMPO: "EMAIL", DESCRIPCION: "Correo electronico (opcional)" },
+    ];
+
+    const wb = XLSX.utils.book_new();
+    const wsEjemplo = XLSX.utils.json_to_sheet(filasEjemplo);
+    const wsInstrucciones = XLSX.utils.json_to_sheet(instrucciones);
+    XLSX.utils.book_append_sheet(wb, wsEjemplo, "Plantilla_Administrativos");
+    XLSX.utils.book_append_sheet(wb, wsInstrucciones, "Instrucciones");
+
+    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    res.setHeader(
+      "Content-Disposition",
+      'attachment; filename="plantilla_administrativos.xlsx"',
+    );
+
+    return res.send(buffer);
+  } catch (error) {
+    console.error("Error al generar plantilla de administrativos:", error);
+    return res
+      .status(500)
+      .json({ error: "Error al generar plantilla de administrativos" });
+  }
+};
+
 module.exports = {
   crearAdministrativo,
   getAdministrativos,
@@ -566,4 +716,5 @@ module.exports = {
   asignarMateria,
   actualizarAdministrativo,
   eliminarAdministrativo,
+  descargarPlantillaAdministrativos,
 };

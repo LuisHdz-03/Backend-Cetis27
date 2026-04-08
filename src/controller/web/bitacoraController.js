@@ -1,5 +1,10 @@
 const prisma = require("../../config/prisma");
 
+const extraerIpDesdeDetalle = (detalle = "") => {
+  const match = String(detalle).match(/IP:\s*([^|]+)/i);
+  return match ? match[1].trim() : "N/D";
+};
+
 const getBitacora = async (req, res) => {
   try {
     const logs = await prisma.bitacora.findMany({
@@ -7,8 +12,12 @@ const getBitacora = async (req, res) => {
       orderBy: { fecha: "desc" },
       include: {
         usuario: {
-          // Cambiamos 'rol' por 'email' para que el frontend lo muestre
-          select: { nombre: true, apellidoPaterno: true, email: true },
+          select: {
+            nombre: true,
+            apellidoPaterno: true,
+            email: true,
+            rol: true,
+          },
         },
       },
     });
@@ -19,7 +28,7 @@ const getBitacora = async (req, res) => {
       accion: log.accion,
       detalles: log.detalle, // Adaptación aquí
       fechaHora: log.fecha, // Adaptación aquí
-      ipBase: "127.0.0.1", // Valor por defecto temporal
+      ipBase: extraerIpDesdeDetalle(log.detalle),
       usuario: log.usuario,
     }));
 

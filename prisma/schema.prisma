@@ -18,6 +18,8 @@ model Usuario {
   rol                  String
   activo               Boolean         @default(true)
   passwordChangeRequired Boolean        @default(true)
+  resetPasswordTokenHash String?
+  resetPasswordExpiresAt DateTime?
   creadoEn             DateTime        @default(now())
   telefono             String?
   direccion            String?
@@ -217,8 +219,24 @@ model Administrativo {
   @@map("administrativos")
 }
 
+model Espacio {
+  idEspacio    Int         @id @default(autoincrement())
+  nombre       String      @unique
+  tipo         TipoEspacio
+  descripcion  String?
+  activo       Boolean     @default(true)
+  creadoEn     DateTime    @default(now())
+
+  @@map("espacios")
+}
+
 enum Turno {
   MATUTINO
   VESPERTINO
   MIXTO
+}
+
+enum TipoEspacio {
+  AULA
+  AREA_COMUN
 }
