@@ -392,13 +392,16 @@ const actualizarGrupo = async (req, res) => {
   }
 };
 
+// no se elimina por seguridad, solo se pone en false
 const eliminarGrupo = async (req, res) => {
   try {
     const { id } = req.params;
 
-    await prisma.grupo.delete({
+    await prisma.grupo.update({
       where: { idGrupo: parseInt(id) },
+      data: { activo: false },
     });
+
     res.json({ mensaje: "Grupo eliminado correctamente" });
   } catch (error) {
     console.error(error);
