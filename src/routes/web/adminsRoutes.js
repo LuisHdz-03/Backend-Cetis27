@@ -21,6 +21,7 @@ const {
   actualizarAdministrativo,
   eliminarAdministrativo,
   descargarPlantillaAdministrativos,
+  subirFirmaDirector,
 } = require("../../controller/web/administrativoController");
 
 router.post("/", verificarToken, soloDirectivo, bitacoraCrear, crearAdministrativo);
@@ -49,4 +50,12 @@ router.put(
   actualizarAdministrativo,
 );
 router.delete("/:id", verificarToken, soloDirectivo, bitacoraEliminar, eliminarAdministrativo);
+router.post(
+  "/firma/subir",
+  verificarToken,
+  soloDirectivo,
+  upload.single("firma"),
+  bitacoraActualizar,
+  subirFirmaDirector,
+);
 module.exports = router;

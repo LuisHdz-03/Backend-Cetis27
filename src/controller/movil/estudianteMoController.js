@@ -319,6 +319,38 @@ const actualizartutor = async (req, res) => {
   }
 };
 
+// Genera firma digital JWT para la credencial
+const generarFirmaCredencial = (datosCredencial) => {
+  const payload = {
+    tipo: "CREDENCIAL_DIGITAL",
+    matricula: datosCredencial.noControl,
+    curp: datosCredencial.curp,
+    nombre: datosCredencial.nombreCompleto,
+    especialidad: datosCredencial.especialidad,
+    grupo: datosCredencial.grupo,
+    turno: datosCredencial.turno,
+    emision: datosCredencial.emision,
+    vigencia: datosCredencial.vigencia,
+    fotoHash: datosCredencial.fotoUrl
+      ? require("crypto")
+          .createHash("sha256")
+          .update(datosCredencial.fotoUrl)
+          .digest("hex")
+          .substring(0, 16)
+      : null,
+    firmadoPor:
+      datosCredencial.firmante.nombre || datosCredencial.firmante.cargo,
+    timestamp: new Date().toISOString(),
+  };
+
+  const firma = jwt.sign(payload, getJwtSecret(), {
+    expiresIn: "365d", // La firma es válida por 1 año
+    algorithm: "HS256",
+  });
+
+  return firma;
+};
+
 const getCredencial = async (req, res) => {
   try {
     const idUsuario = req.usuario.id;
@@ -384,12 +416,19 @@ const getCredencial = async (req, res) => {
       qrPayload,
       qrBase64,
       firmante,
+      imagenFirmaDirector: firmante.firmaImagenUrl || null,
     };
+
+    // Generar firma digital de la credencial
+    const firmaDigital = generarFirmaCredencial(respuesta);
+    respuesta.firmaDigital = firmaDigital;
 
     // Imprimimos en la terminal del backend para verificar que sí manda los datos
     console.log("Datos enviados a la app:", {
       curp: respuesta.curp,
       grupo: respuesta.grupo,
+      firmaHashCortada: firmaDigital.substring(0, 20) + "...",
+      tieneImagenFirma: !!respuesta.firmante.firmaImagenUrl,
     });
 
     res.json(respuesta);
@@ -808,6 +847,61 @@ const getReportesPadre = async (req, res) => {
   }
 };
 
+// Endpoint para verificar la firma digital de una credencial
+const verificarFirmaCredencial = async (req, res) => {
+  try {
+    const { firmaDigital } = req.body;
+
+    if (!firmaDigital) {
+      return res.status(400).json({ error: "La firma digital es requerida" });
+    }
+
+    // Verificar la firma
+    let datosDecodificados;
+    try {
+      datosDecodificados = jwt.verify(firmaDigital, getJwtSecret(), {
+        algorithms: ["HS256"],
+      });
+    } catch (err) {
+      return res.status(401).json({
+        ok: false,
+        valida: false,
+        error: "Firma inválida o expirada",
+        detalleError: err.message,
+      });
+    }
+
+    // Validar que sea una credencial digital
+    if (datosDecodificados.tipo !== "CREDENCIAL_DIGITAL") {
+      return res.status(400).json({
+        ok: false,
+        valida: false,
+        error: "La firma no corresponde a una credencial digital",
+      });
+    }
+
+    return res.json({
+      ok: true,
+      valida: true,
+      mensaje: "Firma válida y no alterada",
+      credencial: {
+        matricula: datosDecodificados.matricula,
+        nombre: datosDecodificados.nombre,
+        curp: datosDecodificados.curp,
+        especialidad: datosDecodificados.especialidad,
+        grupo: datosDecodificados.grupo,
+        turno: datosDecodificados.turno,
+        emision: datosDecodificados.emision,
+        vigencia: datosDecodificados.vigencia,
+        firmadoPor: datosDecodificados.firmadoPor,
+      },
+    });
+  } catch (error) {
+    console.error("Error al verificar firma:", error);
+    res.status(500).json({ error: "Error al verificar la firma" });
+  }
+};
+
 module.exports = {
   getAlumnosMovil,
   uploadFotiko,
@@ -822,4 +916,5 @@ module.exports = {
   getResumenAlumnoPadre,
   getAsistenciasPadre,
   getReportesPadre,
+  verificarFirmaCredencial,
 };

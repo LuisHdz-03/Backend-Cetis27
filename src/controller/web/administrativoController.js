@@ -1,6 +1,8 @@
 const prisma = require("../../config/prisma");
 const bcrypt = require("bcryptjs");
 const XLSX = require("xlsx");
+const sharp = require("sharp");
+const cloudinary = require("cloudinary").v2;
 
 const limpiarMatricula = (valor) => {
   if (valor === undefined || valor === null) return null;
@@ -709,6 +711,147 @@ const descargarPlantillaAdministrativos = async (req, res) => {
   }
 };
 
+// Procesa una imagen de firma: elimina fondo blanco y devuelve PNG transparente
+const procesarImagenFirma = async (buffer) => {
+  try {
+    // Redimensionar para normalizar
+    const imagen = sharp(buffer).resize(300, 100, {
+      fit: "inside",
+      withoutEnlargement: true,
+    });
+
+    // Convertir a PNG con fondo transparente
+    const grises = await imagen.grayscale().png().toBuffer();
+
+    // Aplicar threshold (binarizar)
+    const procesada = await sharp(grises)
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    const { data, info } = procesada;
+    const bytes = 4; // RGBA
+    const threshold = 200; // Píxeles más claros que esto serán transparentes
+
+    // Procesar cada píxel
+    for (let i = 0; i < data.length; i += bytes) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const luminancia = 0.299 * r + 0.587 * g + 0.114 * b;
+      if (luminancia > threshold) {
+        data[i + 3] = 0; // Alpha = 0 (transparente)
+      } else {
+        data[i + 3] = 255; // Alpha = 255 (opaco)
+      }
+    }
+
+    // Convertir de vuelta a PNG
+    const pngProcessado = await sharp(data, {
+      raw: {
+        width: info.width,
+        height: info.height,
+        channels: 4,
+      },
+    })
+      .png()
+      .toBuffer();
+
+    return pngProcessado;
+  } catch (error) {
+    console.error("Error procesando imagen de firma:", error);
+    throw error;
+  }
+};
+
+// Endpoint para subir y procesar la firma de un director
+const subirFirmaDirector = async (req, res) => {
+  try {
+    const { idAdministrativo } = req.body;
+    const archivo = req.file;
+
+    if (!idAdministrativo) {
+      return res
+        .status(400)
+        .json({ error: "El idAdministrativo es requerido" });
+    }
+
+    if (!archivo) {
+      return res.status(400).json({ error: "Debes subir una imagen de firma" });
+    }
+
+    // Validar que sea imagen
+    if (!archivo.mimetype.startsWith("image/")) {
+      return res
+        .status(400)
+        .json({ error: "El archivo debe ser una imagen (JPG, PNG, etc)" });
+    }
+
+    // Validar que el administrativo existe y es director
+    const admin = await prisma.administrativo.findUnique({
+      where: { idAdministrativo: parseInt(idAdministrativo) },
+      include: { usuario: { select: { nombre: true, apellidoPaterno: true } } },
+    });
+
+    if (!admin) {
+      return res.status(404).json({ error: "Administrativo no encontrado" });
+    }
+
+    if (!admin.cargo.toUpperCase().includes("DIRECTOR")) {
+      return res
+        .status(403)
+        .json({ error: "Solo los directores pueden registrar una firma" });
+    }
+
+    // Procesar la imagen: elimina fondo blanco
+    const imagenProcesada = await procesarImagenFirma(archivo.buffer);
+
+    // Subir a Cloudinary
+    const uploadResult = await new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        {
+          folder: "cetis27/firmas",
+          resource_type: "image",
+          public_id: `firma_director_${parseInt(idAdministrativo)}_${Date.now()}`,
+          overwrite: true,
+          format: "png",
+          transformation: [
+            {
+              width: 300,
+              height: 100,
+              crop: "fit",
+              quality: "auto:good",
+            },
+          ],
+        },
+        (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        },
+      );
+      stream.end(imagenProcesada);
+    });
+
+    const firmaUrl = uploadResult.secure_url;
+
+    // Guardar solo la URL en la BD (no el base64)
+    await prisma.administrativo.update({
+      where: { idAdministrativo: parseInt(idAdministrativo) },
+      data: { firmaImagenUrl: firmaUrl },
+    });
+
+    res.json({
+      ok: true,
+      mensaje: "Firma subida a Cloudinary correctamente",
+      idAdministrativo,
+      nombreDirector: `${admin.usuario.nombre} ${admin.usuario.apellidoPaterno}`,
+      firmaUrl,
+    });
+  } catch (error) {
+    console.error("Error al subir firma del director:", error);
+    res.status(500).json({ error: "Error al subir la firma a Cloudinary" });
+  }
+};
+
 module.exports = {
   crearAdministrativo,
   getAdministrativos,
@@ -717,4 +860,5 @@ module.exports = {
   actualizarAdministrativo,
   eliminarAdministrativo,
   descargarPlantillaAdministrativos,
+  subirFirmaDirector,
 };

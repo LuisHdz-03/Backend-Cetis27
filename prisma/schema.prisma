@@ -215,6 +215,7 @@ model Administrativo {
   area             String?
   usuarioId        Int     @unique
   usuario          Usuario @relation(fields: [usuarioId], references: [idUsuario])
+  firmaImagenUrl   String? 
 
   @@map("administrativos")
 }

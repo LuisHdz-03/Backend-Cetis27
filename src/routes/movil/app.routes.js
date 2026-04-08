@@ -20,6 +20,7 @@ const {
   getHistorialAccesos,
   getReportesEstudianteMovil,
   cambiarContrasenia,
+  verificarFirmaCredencial,
 } = require("../../controller/movil/estudianteMoController");
 
 router.get("/", (req, res) => {
@@ -46,6 +47,8 @@ router.post(
   bitacoraActualizar,
   guardarDisenioCredencialMovil,
 );
+// Verificar firma sin autenticación (público, cualquiera puede validar una credencial)
+router.post("/credencial/verificar-firma", verificarFirmaCredencial);
 
 router.get("/accesos", bitacoraConsultar, getHistorialAccesos);
 router.get("/asistencias", bitacoraConsultar, getAsistencias);
