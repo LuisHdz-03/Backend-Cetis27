@@ -89,6 +89,7 @@ const login = async (req, res) => {
     res.json({
       mensaje: `Bienvenido a la plataforma ${plataforma}`,
       token,
+      passwordChangeRequired: usuario.passwordChangeRequired,
       usuario: {
         id: usuario.idUsuario,
         username: usuario.username,
@@ -151,4 +152,52 @@ const cambiarPassword = async (req, res) => {
   }
 };
 
-module.exports = { login, cambiarPassword };
+// Endpoint especial para cambio de contraseña obligatorio en el primer login
+const cambiarPasswordObligatorio = async (req, res) => {
+  try {
+    const { idUsuario, passwordNueva } = req.body;
+
+    if (!idUsuario || !passwordNueva) {
+      return res.status(400).json({ error: "Faltan datos obligatorios (idUsuario, passwordNueva)" });
+    }
+
+    const usuario = await prisma.usuario.findUnique({
+      where: { idUsuario: parseInt(idUsuario) },
+    });
+
+    if (!usuario) {
+      return res.status(404).json({ error: "Usuario no encontrado" });
+    }
+
+    if (!usuario.passwordChangeRequired) {
+      return res.status(400).json({ error: "Este usuario ya cambió su contraseña" });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(passwordNueva, salt);
+
+    await prisma.usuario.update({
+      where: { idUsuario: parseInt(idUsuario) },
+      data: { 
+        password: hashedPassword,
+        passwordChangeRequired: false,
+      },
+    });
+
+    await registrarAccionManual(
+      usuario.idUsuario,
+      "CAMBIO CONTRASEÑA OBLIGATORIO",
+      "El usuario cambió su contraseña obligatoria de primer login.",
+    );
+
+    res.json({ 
+      ok: true, 
+      mensaje: "Contraseña actualizada exitosamente. Por favor, inicia sesión nuevamente con tu nueva contraseña." 
+    });
+  } catch (error) {
+    console.error("Error al cambiar contraseña obligatoria:", error);
+    res.status(500).json({ error: "Error interno del servidor" });
+  }
+};
+
+module.exports = { login, cambiarPassword, cambiarPasswordObligatorio };

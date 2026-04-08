@@ -27,6 +27,19 @@ const extraerFechaDesdeCURP = (curp) => {
   }
 };
 
+// Función para extraer fecha en formato AA/MM/DD desde CURP (para password inicial)
+const extraerFechaPasswordDesdeCURP = (curp) => {
+  if (!curp || curp.length < 10) return null;
+  try {
+    const aa = curp.substring(4, 6);
+    const mm = curp.substring(6, 8);
+    const dd = curp.substring(8, 10);
+    return `${aa}/${mm}/${dd}`;
+  } catch (e) {
+    return null;
+  }
+};
+
 // controladores
 
 const crearDocente = async (req, res) => {
@@ -38,6 +51,7 @@ const crearDocente = async (req, res) => {
       curp,
       numeroEmpleado,
       password,
+      email,
       telefono,
       direccion,
       idEspecialidad,
@@ -46,12 +60,12 @@ const crearDocente = async (req, res) => {
 
     const numEmpleadoLimpio = limpiarMatricula(numeroEmpleado);
     const fechaNac = extraerFechaDesdeCURP(curp);
-    const usernameGenerado = curp.trim().toLowerCase();
-    const emailGenerado = `${curp.substring(0, 10).toLowerCase()}@docentes.cetis27.edu.mx`;
+    const usernameGenerado = numEmpleadoLimpio;
+    const emailNormalizado = email ? email.trim().toLowerCase() : null;
+    const passwordInicial = extraerFechaPasswordDesdeCURP(curp);
 
-    const passToHash = password || numEmpleadoLimpio;
     const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(passToHash, salt);
+    const hashedPassword = await bcrypt.hash(passwordInicial, salt);
 
     const resultado = await prisma.$transaction(async (tx) => {
       const nuevoUsuario = await tx.usuario.create({
@@ -60,7 +74,7 @@ const crearDocente = async (req, res) => {
           apellidoPaterno,
           apellidoMaterno,
           username: usernameGenerado,
-          email: emailGenerado,
+          email: emailNormalizado,
           curp: curp.trim().toUpperCase(),
           fechaNacimiento: fechaNac,
           password: hashedPassword,
@@ -68,6 +82,7 @@ const crearDocente = async (req, res) => {
           direccion,
           rol: "DOCENTE",
           activo: true,
+          passwordChangeRequired: true,
         },
       });
 
@@ -88,10 +103,14 @@ const crearDocente = async (req, res) => {
     res.status(201).json({
       ok: true,
       mensaje: "Docente registrado con éxito",
+      credenciales: {
+        username: resultado.usuario.username,
+        password_inicial: passwordInicial,
+        aviso: "El usuario debe cambiar la contraseña en el primer inicio de sesión.",
+      },
       datos: {
         nombre: resultado.usuario.nombre,
         username: resultado.usuario.username,
-        email: resultado.usuario.email,
         numeroEmpleado: resultado.docente.numeroEmpleado,
       },
     });
@@ -100,7 +119,7 @@ const crearDocente = async (req, res) => {
     if (error.code === "P2002") {
       return res.status(400).json({
         ok: false,
-        error: "La CURP, Email o Número de Empleado ya existe",
+        error: "La CURP, Username, Email o Número de Empleado ya existe",
       });
     }
     console.error(error);
@@ -129,6 +148,7 @@ const getDocentes = async (req, res) => {
       nombre: d.usuario?.nombre,
       apellidoPaterno: d.usuario?.apellidoPaterno || "",
       apellidoMaterno: d.usuario?.apellidoMaterno || "",
+      username: d.usuario?.username || "N/A",
       email: d.usuario?.email || "N/A",
       curp: d.usuario?.curp || "N/A",
       telefono: d.usuario?.telefono || "N/A",
@@ -183,7 +203,8 @@ const cargarDocentesMasivos = async (req, res) => {
         const numEmpleadoLimpio = limpiarMatricula(numEmpleadoExcel);
         const fechaNac = extraerFechaDesdeCURP(curpExcel);
         const usernameGenerado = curpExcel.trim().toLowerCase();
-        const emailGenerado = `${curpExcel.substring(0, 10).toLowerCase()}@docentes.cetis27.edu.mx`;
+        const emailExcel = fila["EMAIL"];
+        const emailNormalizado = emailExcel ? String(emailExcel).trim().toLowerCase() : null;
 
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(
@@ -217,8 +238,8 @@ const cargarDocentesMasivos = async (req, res) => {
               usuarioUpdate.curp = curpExcel.trim().toUpperCase();
               usuarioUpdate.username = usernameGenerado;
             }
-            if (emailGenerado !== docenteExistente.usuario.email)
-              usuarioUpdate.email = emailGenerado;
+            if (emailNormalizado !== docenteExistente.usuario.email)
+              usuarioUpdate.email = emailNormalizado;
             if (
               fechaNac &&
               fechaNac.getTime() !==
@@ -241,7 +262,7 @@ const cargarDocentesMasivos = async (req, res) => {
                 apellidoPaterno: paternoExcel || "",
                 apellidoMaterno: maternoExcel || "",
                 username: usernameGenerado,
-                email: emailGenerado,
+                email: emailNormalizado,
                 curp: curpExcel.trim().toUpperCase(),
                 fechaNacimiento: fechaNac,
                 password: hashedPassword,
@@ -264,7 +285,7 @@ const cargarDocentesMasivos = async (req, res) => {
         console.error(`Error con el docente ${numEmpleadoExcel}: `, error);
         let msg = "Error al procesar la fila";
         if (error.code === "P2002")
-          msg = "Docente duplicado (CURP/Email/Número Empleado)";
+          msg = "Docente duplicado (CURP/Username/Email/Número Empleado)";
         errores.push({ numeroEmpleado: numEmpleadoExcel, error: msg });
       }
     }
@@ -359,6 +380,7 @@ const actualizarDocente = async (req, res) => {
       numeroEmpleado,
       password,
       activo,
+      email,
       telefono,
       direccion,
       idEspecialidad,
@@ -379,6 +401,9 @@ const actualizarDocente = async (req, res) => {
       usuarioData.curp = curp.trim().toUpperCase();
       usuarioData.username = curp.trim().toLowerCase();
       usuarioData.fechaNacimiento = extraerFechaDesdeCURP(curp);
+    }
+    if (email !== undefined) {
+      usuarioData.email = email ? email.trim().toLowerCase() : null;
     }
 
     if (password) {
@@ -427,7 +452,7 @@ const actualizarDocente = async (req, res) => {
       return res.status(400).json({
         ok: false,
         error:
-          "La CURP, Email o Número de Empleado ya están en uso por otro registro.",
+          "La CURP, Username, Email o Número de Empleado ya están en uso por otro registro.",
       });
     }
 

@@ -12,11 +12,12 @@ model Usuario {
   nombre               String
   apellidoPaterno      String
   apellidoMaterno      String
-  username             String?         @unique
-  email                String?          @unique
+  username             String          @unique
+  email                String?         @unique
   password             String
   rol                  String
   activo               Boolean         @default(true)
+  passwordChangeRequired Boolean        @default(true)
   creadoEn             DateTime        @default(now())
   telefono             String?
   direccion            String?

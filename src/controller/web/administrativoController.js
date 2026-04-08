@@ -32,6 +32,19 @@ const extraerFechaDesdeCURP = (curp) => {
   }
 };
 
+// Función para extraer fecha en formato AA/MM/DD desde CURP (para password inicial)
+const extraerFechaPasswordDesdeCURP = (curp) => {
+  if (!curp || curp.length < 10) return null;
+  try {
+    const aa = curp.substring(4, 6);
+    const mm = curp.substring(6, 8);
+    const dd = curp.substring(8, 10);
+    return `${aa}/${mm}/${dd}`;
+  } catch (e) {
+    return null;
+  }
+};
+
 // Cargos permitidos para personal administrativo
 const cargosPermitidos = [
   "DIRECTOR",
@@ -57,6 +70,7 @@ const crearAdministrativo = async (req, res) => {
       area,
       numeroEmpleado,
       rol,
+      email,
       telefono,
     } = req.body;
 
@@ -79,14 +93,12 @@ const crearAdministrativo = async (req, res) => {
 
     const numEmpleadoLimpio = limpiarMatricula(numeroEmpleado);
     const fechaNac = extraerFechaDesdeCURP(curp);
-    const usernameGenerado = curp.trim().toLowerCase();
-    const emailGenerado = `${curp.substring(0, 10).toLowerCase()}@admin.cetis27.edu.mx`;
+    const usernameGenerado = numEmpleadoLimpio;
+    const emailNormalizado = email ? email.trim().toLowerCase() : null;
+    const passwordInicial = extraerFechaPasswordDesdeCURP(curp);
 
     const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(
-      password || numEmpleadoLimpio,
-      salt,
-    );
+    const hashedPassword = await bcrypt.hash(passwordInicial, salt);
 
     const nuevoAdmin = await prisma.$transaction(async (tx) => {
       const usuario = await tx.usuario.create({
@@ -95,13 +107,14 @@ const crearAdministrativo = async (req, res) => {
           apellidoPaterno,
           apellidoMaterno,
           username: usernameGenerado,
-          email: emailGenerado,
+          email: emailNormalizado,
           curp: curp.trim().toUpperCase(),
           fechaNacimiento: fechaNac,
           password: hashedPassword,
           rol: rolAsignar,
           activo: true,
           telefono,
+          passwordChangeRequired: true,
         },
       });
 
@@ -120,6 +133,12 @@ const crearAdministrativo = async (req, res) => {
     res.status(201).json({
       ok: true,
       mensaje: `Personal registrado correctamente como ${rolAsignar}`,
+      credenciales: {
+        username: nuevoAdmin.usuario.username,
+        password_inicial: passwordInicial,
+        aviso:
+          "El usuario debe cambiar la contraseña en el primer inicio de sesión.",
+      },
       data: nuevoAdmin,
     });
   } catch (error) {
@@ -127,7 +146,7 @@ const crearAdministrativo = async (req, res) => {
     if (error.code === "P2002") {
       return res.status(400).json({
         ok: false,
-        error: "La CURP, Email o Número de Empleado ya existe",
+        error: "La CURP, Username, Email o Número de Empleado ya existe",
       });
     }
     res.status(500).json({ ok: false, error: "Error al registrar personal." });
@@ -143,6 +162,7 @@ const getAdministrativos = async (req, res) => {
             nombre: true,
             apellidoPaterno: true,
             apellidoMaterno: true,
+            username: true,
             email: true,
             curp: true,
             telefono: true,
@@ -159,6 +179,7 @@ const getAdministrativos = async (req, res) => {
       nombre: a.usuario.nombre,
       apellidoPaterno: a.usuario.apellidoPaterno,
       apellidoMaterno: a.usuario.apellidoMaterno,
+      username: a.usuario.username,
       telefono: a.usuario.telefono,
       curp: a.usuario.curp,
       email: a.usuario.email,
@@ -224,7 +245,10 @@ const cargarAdministrativosMasivos = async (req, res) => {
         const numEmpleadoLimpio = limpiarMatricula(numEmpleadoExcel);
         const fechaNac = extraerFechaDesdeCURP(curpExcel);
         const usernameGenerado = curpExcel.trim().toLowerCase();
-        const emailGenerado = `${curpExcel.substring(0, 10).toLowerCase()}@admin.cetis27.edu.mx`;
+        const emailExcel = fila["EMAIL"];
+        const emailNormalizado = emailExcel
+          ? String(emailExcel).trim().toLowerCase()
+          : null;
 
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(
@@ -261,8 +285,8 @@ const cargarAdministrativosMasivos = async (req, res) => {
               usuarioUpdate.curp = curpExcel.trim().toUpperCase();
               usuarioUpdate.username = usernameGenerado;
             }
-            if (emailGenerado !== administrativoExistente.usuario.email)
-              usuarioUpdate.email = emailGenerado;
+            if (emailNormalizado !== administrativoExistente.usuario.email)
+              usuarioUpdate.email = emailNormalizado;
             if (
               fechaNac &&
               fechaNac.getTime() !==
@@ -301,7 +325,7 @@ const cargarAdministrativosMasivos = async (req, res) => {
                 apellidoPaterno: fila["PATERNO"] || "",
                 apellidoMaterno: fila["MATERNO"] || "",
                 username: usernameGenerado,
-                email: emailGenerado,
+                email: emailNormalizado,
                 curp: curpExcel.trim().toUpperCase(),
                 fechaNacimiento: fechaNac,
                 password: hashedPassword,
@@ -326,7 +350,7 @@ const cargarAdministrativosMasivos = async (req, res) => {
         console.error(`Error con administrativo ${numEmpleadoExcel}: `, error);
         let msg = "Error al procesar la fila";
         if (error.code === "P2002")
-          msg = "Dato duplicado (CURP/Email/Num Empleado)";
+          msg = "Dato duplicado (CURP/Username/Email/Num Empleado)";
         errores.push({ numeroEmpleado: numEmpleadoExcel, error: msg });
       }
     }
@@ -379,6 +403,7 @@ const actualizarAdministrativo = async (req, res) => {
       cargo,
       area,
       numeroEmpleado,
+      email,
       telefono,
       activo,
     } = req.body;
@@ -426,6 +451,8 @@ const actualizarAdministrativo = async (req, res) => {
         usuarioData.curp = curp.trim().toUpperCase();
         usuarioData.username = curp.trim().toLowerCase();
       }
+      if (email !== undefined)
+        usuarioData.email = email ? email.trim().toLowerCase() : null;
       if (telefono !== undefined) usuarioData.telefono = telefono;
       if (activo !== undefined) usuarioData.activo = activo;
 
@@ -466,7 +493,7 @@ const actualizarAdministrativo = async (req, res) => {
     if (error.code === "P2002") {
       return res.status(400).json({
         ok: false,
-        error: "La CURP o Email ya está en uso por otro usuario",
+        error: "La CURP, Username o Email ya está en uso por otro usuario",
       });
     }
 

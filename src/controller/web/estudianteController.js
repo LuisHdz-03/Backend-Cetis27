@@ -27,6 +27,19 @@ const extraerFechaDesdeCURP = (curp) => {
   }
 };
 
+// Función para extraer fecha en formato AA/MM/DD desde CURP (para password inicial)
+const extraerFechaPasswordDesdeCURP = (curp) => {
+  if (!curp || curp.length < 10) return null;
+  try {
+    const aa = curp.substring(4, 6);
+    const mm = curp.substring(6, 8);
+    const dd = curp.substring(8, 10);
+    return `${aa}/${mm}/${dd}`;
+  } catch (e) {
+    return null;
+  }
+};
+
 const crearEstudiante = async (req, res) => {
   try {
     const {
@@ -34,6 +47,7 @@ const crearEstudiante = async (req, res) => {
       apellidoPaterno,
       apellidoMaterno,
       curp,
+      email,
       matricula,
       semestre,
       grupoId,
@@ -43,11 +57,12 @@ const crearEstudiante = async (req, res) => {
 
     const matriculaLimpia = limpiarMatricula(matricula);
     const fechaNac = extraerFechaDesdeCURP(curp);
-    const usernameGenerado = curp.trim().toLowerCase();
-    const emailGenerado = `${curp.substring(0, 10).toLowerCase()}@cetis27.edu.mx`;
+    const usernameGenerado = matriculaLimpia;
+    const emailNormalizado = email ? email.trim().toLowerCase() : null;
+    const passwordInicial = extraerFechaPasswordDesdeCURP(curp);
 
     const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(matricula, salt);
+    const hashedPassword = await bcrypt.hash(passwordInicial, salt);
 
     const resultado = await prisma.$transaction(async (tx) => {
       const nuevoUsuario = await tx.usuario.create({
@@ -56,7 +71,7 @@ const crearEstudiante = async (req, res) => {
           apellidoPaterno,
           apellidoMaterno,
           username: usernameGenerado,
-          email: emailGenerado,
+          email: emailNormalizado,
           curp: curp.trim().toUpperCase(),
           fechaNacimiento: fechaNac,
           password: hashedPassword,
@@ -64,6 +79,7 @@ const crearEstudiante = async (req, res) => {
           direccion,
           rol: "ALUMNO",
           activo: true,
+          passwordChangeRequired: true,
         },
       });
 
@@ -88,8 +104,8 @@ const crearEstudiante = async (req, res) => {
       mensaje: "estudiante creado exitosamente",
       credenciales: {
         username: resultado.usuario.username,
-        email: resultado.usuario.email,
-        password_inicial: matricula,
+        password_inicial: passwordInicial,
+        aviso: "El usuario debe cambiar la contraseña en el primer inicio de sesión.",
       },
     });
   } catch (error) {
@@ -111,6 +127,7 @@ const getEstudiantes = async (req, res) => {
             nombre: true,
             apellidoPaterno: true,
             apellidoMaterno: true,
+            username: true,
             email: true,
             activo: true,
             fechaNacimiento: true,
@@ -178,7 +195,8 @@ const cargarDatosMasivos = async (req, res) => {
       const matriculaLimpia = limpiarMatricula(matriculaExcel);
       const fechaNac = extraerFechaDesdeCURP(curpExcel);
       const usernameGenerado = curpExcel.trim().toLowerCase();
-      const emailGenerado = `${curpExcel.substring(0, 10).toLowerCase()}@cetis27.edu.mx`;
+      const emailExcel = fila["EMAIL"];
+      const emailNormalizado = emailExcel ? String(emailExcel).trim().toLowerCase() : null;
 
       const turnoQuery = fila["TURNO"]
         ? fila["TURNO"].toUpperCase()
@@ -236,8 +254,8 @@ const cargarDatosMasivos = async (req, res) => {
               usuarioUpdate.curp = curpExcel.trim().toUpperCase();
               usuarioUpdate.username = usernameGenerado;
             }
-            if (emailGenerado !== estudianteExistente.usuario.email)
-              usuarioUpdate.email = emailGenerado;
+            if (emailNormalizado !== estudianteExistente.usuario.email)
+              usuarioUpdate.email = emailNormalizado;
             if (
               fechaNac &&
               fechaNac.getTime() !==
@@ -272,7 +290,7 @@ const cargarDatosMasivos = async (req, res) => {
                 apellidoPaterno: paternoExcel || "",
                 apellidoMaterno: maternoExcel || "",
                 username: usernameGenerado,
-                email: emailGenerado,
+                email: emailNormalizado,
                 curp: curpExcel.trim().toUpperCase(),
                 fechaNacimiento: fechaNac,
                 password: hashedPassword,
@@ -419,6 +437,8 @@ const actualizarEstudiante = async (req, res) => {
         dataUsuario.curp = curp.trim().toUpperCase();
         dataUsuario.username = curp.trim().toLowerCase();
       }
+      if (email !== undefined)
+        dataUsuario.email = email ? email.trim().toLowerCase() : null;
 
       if (telefono !== undefined) dataUsuario.telefono = telefono;
       if (direccion !== undefined) dataUsuario.direccion = direccion;
@@ -438,6 +458,7 @@ const actualizarEstudiante = async (req, res) => {
               nombre: true,
               apellidoPaterno: true,
               apellidoMaterno: true,
+              username: true,
               email: true,
               activo: true,
               fechaNacimiento: true,
