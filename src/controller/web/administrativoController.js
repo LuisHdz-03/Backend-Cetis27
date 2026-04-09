@@ -304,10 +304,6 @@ const cargarAdministrativosMasivos = async (req, res) => {
         const fechaNac = extraerFechaDesdeCURP(curpExcel);
         const usernameGenerado = numEmpleadoLimpio;
         const passwordInicial = extraerFechaPasswordDesdeCURP(curpExcel);
-        const emailExcel = fila["EMAIL"];
-        const emailNormalizado = emailExcel
-          ? String(emailExcel).trim().toLowerCase()
-          : null;
 
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(passwordInicial, salt);
@@ -351,8 +347,6 @@ const cargarAdministrativosMasivos = async (req, res) => {
               usuarioUpdate.curp = curpExcel.trim().toUpperCase();
               usuarioUpdate.username = usernameGenerado;
             }
-            if (emailNormalizado !== administrativoExistente.usuario.email)
-              usuarioUpdate.email = emailNormalizado;
             if (
               fechaNac &&
               fechaNac.getTime() !==
@@ -395,7 +389,6 @@ const cargarAdministrativosMasivos = async (req, res) => {
                 apellidoPaterno: fila["PATERNO"] || "",
                 apellidoMaterno: fila["MATERNO"] || "",
                 username: usernameGenerado,
-                email: emailNormalizado,
                 curp: curpExcel.trim().toUpperCase(),
                 fechaNacimiento: fechaNac,
                 password: hashedPassword,
@@ -663,7 +656,6 @@ const descargarPlantillaAdministrativos = async (req, res) => {
         CURP: "HERL820101HDFRMN01",
         CARGO: "COORDINADOR",
         AREA: "Control Escolar",
-        EMAIL: "admin@correo.com",
       },
     ];
 
@@ -682,7 +674,6 @@ const descargarPlantillaAdministrativos = async (req, res) => {
           "Cargo permitido: Director, Subdirectora Académica, Coordinador, Jefe de Departamento, Secretario, Prefecto",
       },
       { CAMPO: "AREA", DESCRIPCION: "Area de trabajo (obligatorio)" },
-      { CAMPO: "EMAIL", DESCRIPCION: "Correo electronico (opcional)" },
     ];
 
     const wb = XLSX.utils.book_new();
