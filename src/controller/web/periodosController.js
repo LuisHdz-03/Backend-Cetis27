@@ -48,6 +48,24 @@ const getPeriodos = async (req, res) => {
   }
 };
 
+const getPeriodoActivo = async (req, res) => {
+  try {
+    const periodoActivo = await prisma.periodo.findFirst({
+      where: { activo: true },
+      orderBy: { fechaInicio: "desc" },
+    });
+
+    if (!periodoActivo) {
+      return res.status(404).json({ error: "No hay periodo activo." });
+    }
+
+    return res.json(periodoActivo);
+  } catch (error) {
+    console.error("Error al obtener periodo activo:", error);
+    return res.status(500).json({ error: "Error al obtener periodo activo." });
+  }
+};
+
 const setPeriodoActual = async (req, res) => {
   const { idPeriodo } = req.params;
 
@@ -148,6 +166,7 @@ const cerrarPeriodoYPromover = async (req, res) => {
 module.exports = {
   crearPeriodo,
   getPeriodos,
+  getPeriodoActivo,
   setPeriodoActual,
   cerrarPeriodoYPromover,
 };

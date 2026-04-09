@@ -3,6 +3,7 @@ const router = Router();
 const {
   crearPeriodo,
   getPeriodos,
+  getPeriodoActivo,
   setPeriodoActual,
   cerrarPeriodoYPromover,
 } = require("../../controller/web/periodosController");
@@ -16,6 +17,13 @@ const {
 
 router.post("/", verificarToken, adminODirectivo, bitacoraCrear, crearPeriodo);
 router.get("/", verificarToken, adminODirectivo, bitacoraConsultar, getPeriodos);
+router.get(
+  "/activo",
+  verificarToken,
+  adminODirectivo,
+  bitacoraConsultar,
+  getPeriodoActivo,
+);
 router.put(
   "/activar/:idPeriodo",
   verificarToken,
