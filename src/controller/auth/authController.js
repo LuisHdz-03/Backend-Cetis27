@@ -126,7 +126,9 @@ const cambiarPassword = async (req, res) => {
     }
 
     if (passwordNueva.length < 8) {
-      return res.status(400).json({ error: "La nueva contraseña debe tener al menos 8 caracteres" });
+      return res.status(400).json({
+        error: "La nueva contraseña debe tener al menos 8 caracteres",
+      });
     }
 
     const usuario = await prisma.usuario.findUnique({
@@ -178,7 +180,9 @@ const cambiarPasswordObligatorio = async (req, res) => {
     }
 
     if (passwordNueva.length < 8) {
-      return res.status(400).json({ error: "La nueva contraseña debe tener al menos 8 caracteres" });
+      return res.status(400).json({
+        error: "La nueva contraseña debe tener al menos 8 caracteres",
+      });
     }
 
     const usuario = await prisma.usuario.findUnique({
@@ -261,10 +265,14 @@ const generarYEnviarTokenRecuperacion = async (usuario, emailDestino) => {
 const solicitarRecuperacionPassword = async (req, res) => {
   try {
     const { username, email, curp } = req.body;
-    const usernameNormalizado = String(username || "").trim().toLowerCase();
+    const usernameNormalizado = String(username || "")
+      .trim()
+      .toLowerCase();
 
     if (!usernameNormalizado) {
-      return res.status(400).json({ error: "El nombre de usuario es obligatorio" });
+      return res
+        .status(400)
+        .json({ error: "El nombre de usuario es obligatorio" });
     }
 
     // Respuesta genérica para evitar enumeración de usuarios
@@ -286,8 +294,12 @@ const solicitarRecuperacionPassword = async (req, res) => {
     }
 
     // --- Caso 2: usuario sin correo ---
-    const emailNormalizado = String(email || "").trim().toLowerCase();
-    const curpNormalizada = String(curp || "").trim().toUpperCase();
+    const emailNormalizado = String(email || "")
+      .trim()
+      .toLowerCase();
+    const curpNormalizada = String(curp || "")
+      .trim()
+      .toUpperCase();
 
     // Si no se proporcionó email+CURP, informar al frontend que los necesita
     if (!emailNormalizado || !curpNormalizada) {
@@ -302,7 +314,9 @@ const solicitarRecuperacionPassword = async (req, res) => {
     // Validar formato de email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(emailNormalizado)) {
-      return res.status(400).json({ error: "El formato del correo no es válido" });
+      return res
+        .status(400)
+        .json({ error: "El formato del correo no es válido" });
     }
 
     // Verificar identidad con CURP
@@ -360,7 +374,9 @@ const restablecerPasswordConToken = async (req, res) => {
     }
 
     if (passwordNueva.length < 8) {
-      return res.status(400).json({ error: "La nueva contraseña debe tener al menos 8 caracteres" });
+      return res.status(400).json({
+        error: "La nueva contraseña debe tener al menos 8 caracteres",
+      });
     }
 
     const tokenHash = crypto
@@ -478,7 +494,9 @@ const registrarCorreo = async (req, res) => {
   try {
     const idUsuario = req.usuario?.id;
     const { email } = req.body;
-    const emailNormalizado = String(email || "").trim().toLowerCase();
+    const emailNormalizado = String(email || "")
+      .trim()
+      .toLowerCase();
 
     if (!emailNormalizado) {
       return res.status(400).json({ error: "El correo es obligatorio" });
@@ -486,7 +504,9 @@ const registrarCorreo = async (req, res) => {
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(emailNormalizado)) {
-      return res.status(400).json({ error: "El formato del correo no es válido" });
+      return res
+        .status(400)
+        .json({ error: "El formato del correo no es válido" });
     }
 
     // Verificar que no esté en uso por otro usuario
@@ -520,6 +540,180 @@ const registrarCorreo = async (req, res) => {
   }
 };
 
+// Permite completar/actualizar datos personales faltantes del perfil
+const completarPerfil = async (req, res) => {
+  try {
+    const idUsuario = req.usuario?.id;
+    const { email, telefono, direccion, fechaNacimiento } = req.body;
+
+    if (!idUsuario) {
+      return res.status(401).json({ error: "No autenticado" });
+    }
+
+    if (
+      email === undefined &&
+      telefono === undefined &&
+      direccion === undefined &&
+      fechaNacimiento === undefined
+    ) {
+      return res.status(400).json({
+        error:
+          "Debes enviar al menos uno de estos campos: email, telefono, direccion, fechaNacimiento",
+      });
+    }
+
+    const dataUpdate = {};
+
+    if (email !== undefined) {
+      const emailNormalizado = String(email || "")
+        .trim()
+        .toLowerCase();
+      if (!emailNormalizado) {
+        return res
+          .status(400)
+          .json({ error: "El correo no puede estar vacío" });
+      }
+
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(emailNormalizado)) {
+        return res
+          .status(400)
+          .json({ error: "El formato del correo no es válido" });
+      }
+
+      const correoOcupado = await prisma.usuario.findFirst({
+        where: {
+          email: emailNormalizado,
+          idUsuario: { not: parseInt(idUsuario, 10) },
+        },
+      });
+
+      if (correoOcupado) {
+        return res.status(409).json({
+          error: "El correo ya está registrado en el sistema por otro usuario",
+        });
+      }
+
+      dataUpdate.email = emailNormalizado;
+    }
+
+    if (telefono !== undefined) {
+      const telefonoNormalizado = String(telefono || "").trim();
+      if (!telefonoNormalizado) {
+        return res
+          .status(400)
+          .json({ error: "El teléfono no puede estar vacío" });
+      }
+
+      const telefonoRegex = /^[0-9+\-()\s]{7,20}$/;
+      if (!telefonoRegex.test(telefonoNormalizado)) {
+        return res.status(400).json({
+          error: "El teléfono tiene un formato inválido",
+        });
+      }
+
+      dataUpdate.telefono = telefonoNormalizado;
+    }
+
+    if (direccion !== undefined) {
+      const direccionNormalizada = String(direccion || "").trim();
+      if (!direccionNormalizada) {
+        return res
+          .status(400)
+          .json({ error: "La dirección no puede estar vacía" });
+      }
+      dataUpdate.direccion = direccionNormalizada;
+    }
+
+    if (fechaNacimiento !== undefined) {
+      const fecha = new Date(fechaNacimiento);
+      if (isNaN(fecha.getTime())) {
+        return res.status(400).json({ error: "Fecha de nacimiento inválida" });
+      }
+      dataUpdate.fechaNacimiento = fecha;
+    }
+
+    const usuarioActualizado = await prisma.usuario.update({
+      where: { idUsuario: parseInt(idUsuario, 10) },
+      data: dataUpdate,
+      select: {
+        idUsuario: true,
+        email: true,
+        telefono: true,
+        direccion: true,
+        fechaNacimiento: true,
+      },
+    });
+
+    const camposFaltantes = [
+      !usuarioActualizado.email ? "email" : null,
+      !usuarioActualizado.telefono ? "telefono" : null,
+      !usuarioActualizado.direccion ? "direccion" : null,
+      !usuarioActualizado.fechaNacimiento ? "fechaNacimiento" : null,
+    ].filter(Boolean);
+
+    await registrarAccionManual(
+      parseInt(idUsuario, 10),
+      "COMPLETAR PERFIL",
+      `El usuario actualizó su información personal. Campos editados: ${Object.keys(dataUpdate).join(", ")}`,
+    );
+
+    return res.json({
+      ok: true,
+      mensaje: "Perfil actualizado correctamente",
+      usuario: usuarioActualizado,
+      perfilCompleto: camposFaltantes.length === 0,
+      camposFaltantes,
+    });
+  } catch (error) {
+    console.error("Error al completar perfil:", error);
+    return res.status(500).json({ error: "Error interno del servidor" });
+  }
+};
+
+// Obtiene solo los datos personales editables para completar perfil
+const getDatosPerfilEditable = async (req, res) => {
+  try {
+    const idUsuario = req.usuario?.id;
+
+    if (!idUsuario) {
+      return res.status(401).json({ error: "No autenticado" });
+    }
+
+    const usuario = await prisma.usuario.findUnique({
+      where: { idUsuario: parseInt(idUsuario, 10) },
+      select: {
+        idUsuario: true,
+        email: true,
+        telefono: true,
+        direccion: true,
+        fechaNacimiento: true,
+      },
+    });
+
+    if (!usuario) {
+      return res.status(404).json({ error: "Usuario no encontrado" });
+    }
+
+    const camposFaltantes = [
+      !usuario.email ? "email" : null,
+      !usuario.telefono ? "telefono" : null,
+      !usuario.direccion ? "direccion" : null,
+      !usuario.fechaNacimiento ? "fechaNacimiento" : null,
+    ].filter(Boolean);
+
+    return res.json({
+      ok: true,
+      datos: usuario,
+      perfilCompleto: camposFaltantes.length === 0,
+      camposFaltantes,
+    });
+  } catch (error) {
+    console.error("Error al obtener datos editables de perfil:", error);
+    return res.status(500).json({ error: "Error interno del servidor" });
+  }
+};
+
 module.exports = {
   login,
   cambiarPassword,
@@ -528,4 +722,6 @@ module.exports = {
   restablecerPasswordConToken,
   getMiPerfil,
   registrarCorreo,
+  completarPerfil,
+  getDatosPerfilEditable,
 };

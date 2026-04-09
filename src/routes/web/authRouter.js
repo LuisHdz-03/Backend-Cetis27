@@ -9,6 +9,8 @@ const {
   restablecerPasswordConToken,
   getMiPerfil,
   registrarCorreo,
+  completarPerfil,
+  getDatosPerfilEditable,
 } = require("../../controller/auth/authController");
 
 const { verificarToken } = require("../../middlewares/authMiddleware");
@@ -16,11 +18,22 @@ const {
   bitacoraActualizar,
   bitacoraConsultar,
 } = require("../../middlewares/bitacoraMiddleware");
-const { loginLimiter, passwordRecoveryLimiter } = require("../../middlewares/rateLimitMiddleware");
+const {
+  loginLimiter,
+  passwordRecoveryLimiter,
+} = require("../../middlewares/rateLimitMiddleware");
 
 router.post("/login", loginLimiter, login);
-router.post("/olvide-password", passwordRecoveryLimiter, solicitarRecuperacionPassword);
-router.post("/restablecer-password", passwordRecoveryLimiter, restablecerPasswordConToken);
+router.post(
+  "/olvide-password",
+  passwordRecoveryLimiter,
+  solicitarRecuperacionPassword,
+);
+router.post(
+  "/restablecer-password",
+  passwordRecoveryLimiter,
+  restablecerPasswordConToken,
+);
 router.put(
   "/cambiar-password",
   verificarToken,
@@ -34,6 +47,23 @@ router.put(
   cambiarPasswordObligatorio,
 );
 router.get("/mi-perfil", verificarToken, bitacoraConsultar, getMiPerfil);
-router.put("/registrar-correo", verificarToken, bitacoraActualizar, registrarCorreo);
+router.get(
+  "/perfil-editable",
+  verificarToken,
+  bitacoraConsultar,
+  getDatosPerfilEditable,
+);
+router.put(
+  "/registrar-correo",
+  verificarToken,
+  bitacoraActualizar,
+  registrarCorreo,
+);
+router.put(
+  "/completar-perfil",
+  verificarToken,
+  bitacoraActualizar,
+  completarPerfil,
+);
 
 module.exports = router;
