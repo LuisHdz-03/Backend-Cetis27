@@ -109,8 +109,8 @@ function construirAccion(req, accionBase) {
     GET: "CONSULTAR",
   };
 
-  const accionBase = accionesPorMetodo[metodo] || "ACCIÓN";
-  return `${accionBase} ${extraerRecurso(req)}`;
+  const accionMetodo = accionesPorMetodo[metodo] || "ACCIÓN";
+  return `${accionMetodo} ${extraerRecurso(req)}`;
 }
 
 function extraerRecurso(req) {
