@@ -34,7 +34,7 @@ const extraerFechaPasswordDesdeCURP = (curp) => {
     const aa = curp.substring(4, 6);
     const mm = curp.substring(6, 8);
     const dd = curp.substring(8, 10);
-    return `${aa}/${mm}/${dd}`;
+    return `${aa}${mm}${dd}`;
   } catch (e) {
     return null;
   }
