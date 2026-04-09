@@ -1,5 +1,6 @@
 const { Router } = require("express");
 const { verificarToken } = require("../../middlewares/authMiddleware");
+const { getPeriodoActivo } = require("../../controller/web/periodosController");
 const router = Router();
 
 // Ruta base de prueba (GET /api/web)
@@ -10,6 +11,9 @@ router.get("/", (req, res) => {
 // Autenticación
 router.use("/auth", require("./authRouter"));
 router.use("/padres", require("./padresRoute"));
+
+// Endpoint público usado por frontend durante el flujo de login
+router.get("/periodos/activo", getPeriodoActivo);
 
 router.use(verificarToken);
 
