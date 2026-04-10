@@ -5,64 +5,70 @@ const estatusValidos = ["PRESENTE", "AUSENTE", "RETARDO", "JUSTIFICADA"];
 
 const normalizarTexto = (valor) => String(valor || "").trim();
 
+const buscarEstudiantePorMatricula = async (matricula) => {
+  const texto = normalizarTexto(matricula);
+  if (!texto) return null;
+
+  return prisma.estudiante.findFirst({
+    where: {
+      matricula: {
+        equals: texto,
+        mode: "insensitive",
+      },
+    },
+    include: {
+      grupo: {
+        include: {
+          especialidad: {
+            select: { nombre: true },
+          },
+        },
+      },
+    },
+  });
+};
+
 const resolverClaseParaAsistencia = async ({
   estudiante,
   materiaNombre,
-  periodoNombre,
-  docenteNumeroEmpleado,
+  docenteUsuarioId,
 }) => {
   const whereBase = {
     grupoId: estudiante.grupoId,
-    materias: {
+    periodo: { activo: true },
+  };
+
+  if (docenteUsuarioId) {
+    whereBase.docente = {
+      usuarioId: docenteUsuarioId,
+    };
+  }
+
+  if (materiaNombre) {
+    whereBase.materias = {
       nombre: {
         equals: materiaNombre,
         mode: "insensitive",
       },
-    },
-  };
-
-  if (docenteNumeroEmpleado) {
-    whereBase.docente = {
-      numeroEmpleado: {
-        equals: docenteNumeroEmpleado,
-        mode: "insensitive",
-      },
     };
-  }
-
-  if (periodoNombre) {
-    whereBase.periodo = {
-      nombre: {
-        equals: periodoNombre,
-        mode: "insensitive",
-      },
-    };
-  } else {
-    whereBase.periodo = { activo: true };
   }
 
   const clases = await prisma.clase.findMany({
     where: whereBase,
-    select: {
-      idClase: true,
-      docente: { select: { numeroEmpleado: true } },
-      periodo: { select: { nombre: true, activo: true } },
-    },
+    select: { idClase: true },
   });
 
   if (clases.length === 0) {
     return {
       ok: false,
-      error:
-        "No se encontró clase para el alumno/materia con los filtros proporcionados",
+      error: "No se encontro clase activa para el alumno con los filtros proporcionados",
     };
   }
 
   if (clases.length > 1) {
     return {
       ok: false,
-      error:
-        "Hay más de una clase posible. Agrega DOCENTE_NUM_EMPLEADO y/o PERIODO para evitar ambigüedad",
+      error: "Hay mas de una clase posible. Agrega MATERIA para evitar ambiguedad",
     };
   }
 
@@ -71,52 +77,96 @@ const resolverClaseParaAsistencia = async ({
 
 const registrarAsistencia = async (req, res) => {
   try {
-    const { claseId, fecha, listaAlumnos, metodo } = req.body;
+    const { fecha, listaAlumnos, listaAsistencias, materia } = req.body;
 
-    if (!claseId || !listaAlumnos || listaAlumnos.length === 0) {
-      return res.status(400).json({ mensaje: "Faltan datos válidos" });
+    const listaFuente = Array.isArray(listaAlumnos)
+      ? listaAlumnos
+      : Array.isArray(listaAsistencias)
+        ? listaAsistencias
+        : [];
+
+    if (listaFuente.length === 0) {
+      return res.status(400).json({ mensaje: "Faltan datos validos" });
     }
 
-    let fechaParaGuardar;
+    const materiaNormalizada = normalizarTexto(materia);
+    const docenteUsuarioId =
+      req.usuario?.rol === "DOCENTE" ? parseInt(req.usuario.id, 10) : null;
 
-    if (fecha) {
-      // EDICIÓN: Si el frontend manda una fecha, significa que el profesor está editando.
-      fechaParaGuardar = new Date(fecha);
+    const fechaParaGuardar = fecha ? new Date(fecha) : new Date();
+    if (isNaN(fechaParaGuardar.getTime())) {
+      return res.status(400).json({ mensaje: "Fecha invalida" });
+    }
 
-      // Borramos los registros exactos de esa fecha/hora para reemplazarlos
-      await prisma.asistencia.deleteMany({
-        where: {
-          claseId: parseInt(claseId),
-          fecha: fechaParaGuardar,
-        },
+    const datosPaInsertar = [];
+    const errores = [];
+
+    for (const item of listaFuente) {
+      const estatus = normalizarTexto(item.estatus).toUpperCase();
+      const matricula = normalizarTexto(item.matricula);
+
+      if (!matricula) {
+        errores.push({ referencia: "N/D", error: "Cada registro requiere MATRICULA" });
+        continue;
+      }
+
+      if (!estatusValidos.includes(estatus)) {
+        errores.push({
+          referencia: matricula,
+          error: "Estatus invalido. Usa PRESENTE, AUSENTE, RETARDO o JUSTIFICADA",
+        });
+        continue;
+      }
+
+      const estudiante = await buscarEstudiantePorMatricula(matricula);
+      if (!estudiante || !estudiante.grupoId) {
+        errores.push({
+          referencia: matricula,
+          error: "No se encontro estudiante o no tiene grupo asignado",
+        });
+        continue;
+      }
+
+      const claseResuelta = await resolverClaseParaAsistencia({
+        estudiante,
+        materiaNombre: materiaNormalizada,
+        docenteUsuarioId,
       });
-    } else {
-      // NUEVA: Si el frontend NO manda fecha, es un pase de lista 100% nuevo
-      fechaParaGuardar = new Date();
+
+      if (!claseResuelta.ok) {
+        errores.push({ referencia: matricula, error: claseResuelta.error });
+        continue;
+      }
+
+      datosPaInsertar.push({
+        claseId: claseResuelta.claseId,
+        alumnoId: estudiante.idEstudiante,
+        estatus,
+        fecha: fechaParaGuardar,
+      });
     }
 
-    const datosPaInsertar = listaAlumnos.map((alumno) => ({
-      claseId: parseInt(claseId),
-      alumnoId: parseInt(alumno.alumnoId),
-      estatus: alumno.estatus.toUpperCase(),
-      fecha: fechaParaGuardar,
-    }));
+    if (datosPaInsertar.length === 0) {
+      return res.status(400).json({
+        mensaje: "No se pudo registrar ninguna asistencia",
+        errores,
+      });
+    }
 
     const resultado = await prisma.asistencia.createMany({
       data: datosPaInsertar,
       skipDuplicates: true,
     });
 
-    res.status(201).json({
-      mensaje: fecha
-        ? "Asistencia actualizada correctamente"
-        : "Asistencia registrada correctamente",
+    return res.status(201).json({
+      mensaje: "Asistencia registrada correctamente",
       totalRegistros: resultado.count,
       fecha: fechaParaGuardar.toISOString(),
+      errores,
     });
   } catch (error) {
     console.error("Error al tomar las asistencias:", error);
-    res.status(500).json({ mensaje: "Error interno al tomar las asistencias" });
+    return res.status(500).json({ mensaje: "Error interno al tomar las asistencias" });
   }
 };
 
@@ -134,7 +184,7 @@ const getAsisPorFecha = async (req, res) => {
 
     const asistencias = await prisma.asistencia.findMany({
       where: {
-        claseId: parseInt(claseId),
+        claseId: parseInt(claseId, 10),
         fecha: {
           gte: inicio,
           lte: fin,
@@ -157,9 +207,10 @@ const getAsisPorFecha = async (req, res) => {
         alumno: { usuario: { apellidoPaterno: "asc" } },
       },
     });
-    res.json(asistencias);
+
+    return res.json(asistencias);
   } catch (error) {
-    res.status(500).json({ error: "Error al obtener asistencias " });
+    return res.status(500).json({ error: "Error al obtener asistencias" });
   }
 };
 
@@ -167,7 +218,7 @@ const justificarFalta = async (req, res) => {
   const { idAsistencia } = req.params;
   try {
     const asistencia = await prisma.asistencia.findUnique({
-      where: { idAsistencia: parseInt(idAsistencia) },
+      where: { idAsistencia: parseInt(idAsistencia, 10) },
     });
 
     if (!asistencia) {
@@ -189,13 +240,13 @@ const justificarFalta = async (req, res) => {
     }
 
     const actualizado = await prisma.asistencia.update({
-      where: { idAsistencia: parseInt(idAsistencia) },
+      where: { idAsistencia: parseInt(idAsistencia, 10) },
       data: { estatus: "JUSTIFICADA" },
     });
 
-    res.json({ mensaje: "Justificacion exitosa", registro: actualizado });
+    return res.json({ mensaje: "Justificacion exitosa", registro: actualizado });
   } catch (error) {
-    res.status(500).json({ error: "error interno al justificar" });
+    return res.status(500).json({ error: "Error interno al justificar" });
   }
 };
 
@@ -203,15 +254,10 @@ const getHistorialAsistencias = async (req, res) => {
   try {
     const { claseId, alumnoId, fechaInicio, fechaFin } = req.query;
 
-    let whereClause = {};
+    const whereClause = {};
 
-    if (claseId) {
-      whereClause.claseId = parseInt(claseId);
-    }
-
-    if (alumnoId) {
-      whereClause.alumnoId = parseInt(alumnoId);
-    }
+    if (claseId) whereClause.claseId = parseInt(claseId, 10);
+    if (alumnoId) whereClause.alumnoId = parseInt(alumnoId, 10);
 
     if (fechaInicio || fechaFin) {
       whereClause.fecha = {};
@@ -253,12 +299,10 @@ const getHistorialAsistencias = async (req, res) => {
       ],
     });
 
-    res.json(historial);
+    return res.json(historial);
   } catch (error) {
     console.error("Error al obtener el historial de asistencias:", error);
-    res
-      .status(500)
-      .json({ error: "Error al obtener el historial de asistencias." });
+    return res.status(500).json({ error: "Error al obtener el historial de asistencias." });
   }
 };
 
@@ -343,71 +387,36 @@ const descargarPlantillaAsistencias = async (req, res) => {
   try {
     const filasEjemplo = [
       {
-        MATRICULA: "22603061070031",
-        MATERIA: "PROGRAMACION WEB",
-        GRUPO: "4A",
-        GRADO: 4,
-        TURNO: "MATUTINO",
-        ESPECIALIDAD: "PROGRAMACION",
-        DOCENTE_NUM_EMPLEADO: "DOC001",
-        PERIODO: "ENERO-JULIO 2026",
         FECHA: "2026-04-07",
         ESTATUS: "PRESENTE",
+        MATRICULA: "22603061070031",
+        MATERIA: "PROGRAMACION WEB",
       },
       {
-        MATRICULA: "22603061070032",
-        MATERIA: "PROGRAMACION WEB",
-        GRUPO: "4A",
-        GRADO: 4,
-        TURNO: "MATUTINO",
-        ESPECIALIDAD: "PROGRAMACION",
-        DOCENTE_NUM_EMPLEADO: "DOC001",
-        PERIODO: "ENERO-JULIO 2026",
         FECHA: "2026-04-07",
         ESTATUS: "AUSENTE",
+        MATRICULA: "22603061070032",
+        MATERIA: "PROGRAMACION WEB",
       },
     ];
 
     const instrucciones = [
       {
-        CAMPO: "MATRICULA",
-        DESCRIPCION: "Numero de control del alumno (obligatorio)",
-      },
-      {
-        CAMPO: "MATERIA",
-        DESCRIPCION: "Nombre exacto de la materia (obligatorio)",
-      },
-      {
-        CAMPO: "GRUPO",
-        DESCRIPCION: "Nombre del grupo, ejemplo 4A (opcional)",
-      },
-      {
-        CAMPO: "GRADO",
-        DESCRIPCION: "Grado numerico del grupo, ejemplo 4 (opcional)",
-      },
-      {
-        CAMPO: "TURNO",
-        DESCRIPCION: "MATUTINO, VESPERTINO o MIXTO (opcional)",
-      },
-      {
-        CAMPO: "ESPECIALIDAD",
-        DESCRIPCION: "Nombre de la especialidad del grupo (opcional)",
-      },
-      {
-        CAMPO: "DOCENTE_NUM_EMPLEADO",
-        DESCRIPCION: "Numero de empleado del docente (opcional, recomendado)",
-      },
-      {
-        CAMPO: "PERIODO",
-        DESCRIPCION: "Nombre del periodo. Si se omite, usa periodo activo",
-      },
-      {
         CAMPO: "FECHA",
-        DESCRIPCION: "Fecha en formato YYYY-MM-DD (obligatorio)",
+        DESCRIPCION: "Obligatorio. Formato YYYY-MM-DD",
       },
       {
         CAMPO: "ESTATUS",
-        DESCRIPCION: "PRESENTE, AUSENTE, RETARDO o JUSTIFICADA (obligatorio)",
+        DESCRIPCION: "Obligatorio. PRESENTE, AUSENTE, RETARDO o JUSTIFICADA",
+      },
+      {
+        CAMPO: "MATRICULA",
+        DESCRIPCION: "Obligatorio. Identificador principal del alumno",
+      },
+      {
+        CAMPO: "MATERIA",
+        DESCRIPCION:
+          "Opcional. Recomendado cuando el alumno tiene mas de una clase activa",
       },
     ];
 
@@ -431,16 +440,14 @@ const descargarPlantillaAsistencias = async (req, res) => {
     return res.send(buffer);
   } catch (error) {
     console.error("Error al generar plantilla de asistencias:", error);
-    return res
-      .status(500)
-      .json({ error: "Error al generar plantilla de asistencias" });
+    return res.status(500).json({ error: "Error al generar plantilla de asistencias" });
   }
 };
 
 const cargarAsistenciasMasivas = async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ error: "No se subió ningún archivo" });
+      return res.status(400).json({ error: "No se subio ningun archivo" });
     }
 
     const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
@@ -448,118 +455,48 @@ const cargarAsistenciasMasivas = async (req, res) => {
     const datosExcel = XLSX.utils.sheet_to_json(sheet);
 
     const errores = [];
-    const registros = [];
+    const registrosNuevos = [];
+    const usuarioId = parseInt(req.usuario?.id, 10);
+    const docenteUsuarioId = req.usuario?.rol === "DOCENTE" ? usuarioId : null;
 
-    for (const fila of datosExcel) {
+    for (let i = 0; i < datosExcel.length; i++) {
+      const fila = datosExcel[i];
+      const numeroFila = i + 2;
+
       const matricula = normalizarTexto(fila["MATRICULA"]);
       const materiaNombre = normalizarTexto(fila["MATERIA"]);
-      const grupoNombre = normalizarTexto(fila["GRUPO"]);
-      const grado = fila["GRADO"] ? parseInt(fila["GRADO"], 10) : null;
-      const turno = normalizarTexto(fila["TURNO"]).toUpperCase();
-      const especialidadNombre = normalizarTexto(fila["ESPECIALIDAD"]);
-      const docenteNumeroEmpleado = normalizarTexto(
-        fila["DOCENTE_NUM_EMPLEADO"],
-      );
-      const periodoNombre = normalizarTexto(fila["PERIODO"]);
       const fecha = fila["FECHA"] ? new Date(fila["FECHA"]) : null;
       const estatus = normalizarTexto(fila["ESTATUS"]).toUpperCase();
 
-      if (!matricula || !materiaNombre || !fecha || !estatus) {
+      if (!fecha || !estatus || !matricula) {
         errores.push({
-          fila,
-          error:
-            "Faltan columnas obligatorias (MATRICULA, MATERIA, FECHA, ESTATUS)",
+          fila: numeroFila,
+          error: "Faltan columnas obligatorias (FECHA, ESTATUS, MATRICULA)",
         });
         continue;
       }
 
       if (isNaN(fecha.getTime())) {
         errores.push({
-          fila,
-          error: "Fecha inválida. Usa formato YYYY-MM-DD",
+          fila: numeroFila,
+          error: "Fecha invalida. Usa formato YYYY-MM-DD",
         });
         continue;
       }
 
       if (!estatusValidos.includes(estatus)) {
         errores.push({
-          fila,
-          error: `Estatus inválido '${estatus}'. Usa PRESENTE, AUSENTE, RETARDO o JUSTIFICADA`,
+          fila: numeroFila,
+          error: `Estatus invalido '${estatus}'. Usa PRESENTE, AUSENTE, RETARDO o JUSTIFICADA`,
         });
         continue;
       }
 
-      if (turno && !["MATUTINO", "VESPERTINO", "MIXTO"].includes(turno)) {
+      const estudiante = await buscarEstudiantePorMatricula(matricula);
+      if (!estudiante || !estudiante.grupoId) {
         errores.push({
-          fila,
-          error: `Turno inválido '${turno}'. Usa MATUTINO, VESPERTINO o MIXTO`,
-        });
-        continue;
-      }
-
-      const estudiante = await prisma.estudiante.findFirst({
-        where: {
-          matricula: {
-            equals: matricula,
-            mode: "insensitive",
-          },
-        },
-        include: {
-          grupo: {
-            include: {
-              especialidad: {
-                select: { nombre: true },
-              },
-            },
-          },
-        },
-      });
-
-      if (!estudiante || !estudiante.grupoId || !estudiante.grupo) {
-        errores.push({
-          fila,
-          error:
-            "No se encontró alumno con esa matrícula o no tiene grupo asignado",
-        });
-        continue;
-      }
-
-      if (
-        grupoNombre &&
-        estudiante.grupo.nombre.toUpperCase() !== grupoNombre.toUpperCase()
-      ) {
-        errores.push({
-          fila,
-          error: `El grupo '${grupoNombre}' no coincide con el grupo actual del alumno`,
-        });
-        continue;
-      }
-
-      if (grado && estudiante.grupo.grado !== grado) {
-        errores.push({
-          fila,
-          error: `El grado '${grado}' no coincide con el grado actual del alumno`,
-        });
-        continue;
-      }
-
-      if (turno && estudiante.grupo.turno !== turno) {
-        errores.push({
-          fila,
-          error: `El turno '${turno}' no coincide con el turno actual del alumno`,
-        });
-        continue;
-      }
-
-      if (
-        especialidadNombre &&
-        (estudiante.grupo.especialidad?.nombre || "").toUpperCase() !==
-          especialidadNombre.toUpperCase()
-      ) {
-        errores.push({
-          fila,
-          error:
-            "La especialidad no coincide con la especialidad actual del grupo del alumno",
+          fila: numeroFila,
+          error: "No se encontro alumno con esa MATRICULA",
         });
         continue;
       }
@@ -567,19 +504,18 @@ const cargarAsistenciasMasivas = async (req, res) => {
       const claseResuelta = await resolverClaseParaAsistencia({
         estudiante,
         materiaNombre,
-        periodoNombre,
-        docenteNumeroEmpleado,
+        docenteUsuarioId,
       });
 
       if (!claseResuelta.ok) {
         errores.push({
-          fila,
+          fila: numeroFila,
           error: claseResuelta.error,
         });
         continue;
       }
 
-      registros.push({
+      registrosNuevos.push({
         claseId: claseResuelta.claseId,
         alumnoId: estudiante.idEstudiante,
         fecha,
@@ -587,9 +523,9 @@ const cargarAsistenciasMasivas = async (req, res) => {
       });
     }
 
-    if (registros.length > 0) {
+    if (registrosNuevos.length > 0) {
       await prisma.asistencia.createMany({
-        data: registros,
+        data: registrosNuevos,
         skipDuplicates: true,
       });
     }
@@ -597,15 +533,13 @@ const cargarAsistenciasMasivas = async (req, res) => {
     return res.json({
       ok: true,
       mensaje: "Carga masiva de asistencias finalizada",
-      insertados: registros.length,
+      insertados: registrosNuevos.length,
       fallidos: errores.length,
       detalles: errores,
     });
   } catch (error) {
     console.error("Error en carga masiva de asistencias:", error);
-    return res
-      .status(500)
-      .json({ error: "Error interno al cargar asistencias" });
+    return res.status(500).json({ error: "Error interno al cargar asistencias" });
   }
 };
 

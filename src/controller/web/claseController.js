@@ -147,10 +147,17 @@ const getClase = async (req, res) => {
 
 const getClaseByDocente = async (req, res) => {
   const { idDocente } = req.params;
+  const idSolicitado = parseInt(idDocente, 10);
 
   try {
+    if (req.usuario?.rol === "DOCENTE" && req.usuario?.id !== idSolicitado) {
+      return res.status(403).json({
+        error: "Solo puedes consultar tu propia carga academica",
+      });
+    }
+
     const docente = await prisma.docente.findUnique({
-      where: { usuarioId: parseInt(idDocente) },
+      where: { usuarioId: idSolicitado },
     });
 
     if (!docente) {

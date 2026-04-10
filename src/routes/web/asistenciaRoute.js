@@ -25,7 +25,7 @@ const {
 router.post(
   "/",
   verificarToken,
-  verificarRol("ADMINISTRATIVO", "DIRECTIVO", "PREFECTO"),
+  verificarRol("ADMINISTRATIVO", "DIRECTIVO", "PREFECTO", "DOCENTE"),
   bitacoraCrear,
   registrarAsistencia,
 );
@@ -53,21 +53,21 @@ router.get(
 router.get(
   "/historial/excel",
   verificarToken,
-  verificarRol("ADMINISTRATIVO", "DIRECTIVO", "PREFECTO"),
+  verificarRol("ADMINISTRATIVO", "DIRECTIVO", "PREFECTO", "DOCENTE"),
   bitacoraConsultar,
   exportarHistorialAsistenciasExcel,
 );
 router.get(
   "/plantilla/excel",
   verificarToken,
-  verificarRol("ADMINISTRATIVO", "DIRECTIVO", "PREFECTO"),
+  verificarRol("ADMINISTRATIVO", "DIRECTIVO", "PREFECTO", "DOCENTE"),
   bitacoraConsultar,
   descargarPlantillaAsistencias,
 );
 router.post(
   "/masivo",
   verificarToken,
-  verificarRol("ADMINISTRATIVO", "DIRECTIVO", "PREFECTO"),
+  verificarRol("ADMINISTRATIVO", "DIRECTIVO", "PREFECTO", "DOCENTE"),
   upload.single("archivoExcel"),
   bitacoraCargaMasiva,
   cargarAsistenciasMasivas,

@@ -8,7 +8,11 @@ const {
   actualizarClase,
 } = require("../../controller/web/claseController");
 
-const { verificarToken, adminODirectivo } = require("../../middlewares/authMiddleware");
+const {
+  verificarToken,
+  adminODirectivo,
+  verificarRol,
+} = require("../../middlewares/authMiddleware");
 const {
   bitacoraCrear,
   bitacoraConsultar,
@@ -20,7 +24,7 @@ router.get("/", verificarToken, adminODirectivo, bitacoraConsultar, getClase);
 router.get(
   "/docente/:idDocente",
   verificarToken,
-  adminODirectivo,
+  verificarRol("ADMINISTRATIVO", "DIRECTIVO", "DOCENTE"),
   bitacoraConsultar,
   getClaseByDocente,
 );

@@ -8,7 +8,11 @@ const {
   cerrarPeriodoYPromover,
 } = require("../../controller/web/periodosController");
 
-const { verificarToken, adminODirectivo } = require("../../middlewares/authMiddleware");
+const {
+  verificarToken,
+  adminODirectivo,
+  verificarRol,
+} = require("../../middlewares/authMiddleware");
 const {
   bitacoraCrear,
   bitacoraConsultar,
@@ -16,11 +20,17 @@ const {
 } = require("../../middlewares/bitacoraMiddleware");
 
 router.post("/", verificarToken, adminODirectivo, bitacoraCrear, crearPeriodo);
-router.get("/", verificarToken, adminODirectivo, bitacoraConsultar, getPeriodos);
+router.get(
+  "/",
+  verificarToken,
+  verificarRol("ADMINISTRATIVO", "DIRECTIVO", "DOCENTE"),
+  bitacoraConsultar,
+  getPeriodos,
+);
 router.get(
   "/activo",
   verificarToken,
-  adminODirectivo,
+  verificarRol("ADMINISTRATIVO", "DIRECTIVO", "DOCENTE"),
   bitacoraConsultar,
   getPeriodoActivo,
 );
