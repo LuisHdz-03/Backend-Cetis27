@@ -24,7 +24,9 @@ const obtenerFirmanteCredencial = async () => {
       cargo: { in: ["DIRECTOR", "DIRECTORA"] },
       usuario: { activo: true },
     },
-    include: {
+    select: {
+      cargo: true,
+      firmaImagenUrl: true,
       usuario: {
         select: {
           nombre: true,
@@ -32,11 +34,6 @@ const obtenerFirmanteCredencial = async () => {
           apellidoMaterno: true,
         },
       },
-    },
-    select: {
-      cargo: true,
-      firmaImagenUrl: true,
-      usuario: true,
     },
     orderBy: { idAdministrativo: "desc" },
   });
