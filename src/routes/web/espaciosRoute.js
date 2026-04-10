@@ -16,6 +16,7 @@ const {
 const {
   verificarToken,
   adminODirectivo,
+  verificarRol,
 } = require("../../middlewares/authMiddleware");
 
 const {
@@ -30,7 +31,7 @@ router.post("/", verificarToken, adminODirectivo, bitacoraCrear, crearEspacio);
 router.get(
   "/",
   verificarToken,
-  adminODirectivo,
+  verificarRol("ADMINISTRATIVO", "DIRECTIVO", "DOCENTE", "PREFECTO"),
   bitacoraConsultar,
   getEspacios,
 );
