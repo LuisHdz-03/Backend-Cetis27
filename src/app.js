@@ -23,7 +23,14 @@ const corsOptions = {
     return callback(new Error("Origin no permitido por CORS"));
   },
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "X-Access-Token",
+    "X-Auth-Token",
+    "Token",
+  ],
+  credentials: true,
   optionsSuccessStatus: 204,
 };
 

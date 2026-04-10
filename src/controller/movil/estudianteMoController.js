@@ -33,6 +33,11 @@ const obtenerFirmanteCredencial = async () => {
         },
       },
     },
+    select: {
+      cargo: true,
+      firmaImagenUrl: true,
+      usuario: true,
+    },
     orderBy: { idAdministrativo: "desc" },
   });
 
@@ -40,6 +45,7 @@ const obtenerFirmanteCredencial = async () => {
     return {
       cargo: "DIRECCION DEL PLANTEL",
       nombre: null,
+      firmaImagenUrl: null,
       fuente: "fallback",
     };
   }
@@ -56,6 +62,7 @@ const obtenerFirmanteCredencial = async () => {
   return {
     cargo: director.cargo,
     nombre: nombreCompleto || null,
+    firmaImagenUrl: director.firmaImagenUrl || null,
     fuente: "administrativo_activo",
   };
 };

@@ -1,7 +1,7 @@
 const prisma = require("../../config/prisma");
 const XLSX = require("xlsx");
 
-const tiposValidos = ["AULA", "AREA_COMUN"];
+const tiposValidos = ["AULA", "AREACOMUN", "AREA COMUN", "AREA_COMUN"];
 
 const palabrasAula = [
   "AULA",
@@ -22,14 +22,28 @@ const mapearTipoEspacio = (tipoEntrada) => {
   const tipo = normalizarTexto(tipoEntrada);
 
   if (!tipo) return null;
-  if (tiposValidos.includes(tipo)) return tipo;
+  if (tipo === "AULA") return "AULA";
+  if (tipo === "AREACOMUN" || tipo === "AREA COMUN" || tipo === "AREA_COMUN") {
+    return "AREACOMUN";
+  }
 
   if (palabrasAula.includes(tipo)) return "AULA";
 
-  // Cualquier otro texto libre se considera AREA_COMUN
+  // Cualquier otro texto libre se considera AREACOMUN
   // Ejemplos: LABORATORIO, BIBLIOTECA, CANCHA, PATIO, TALLER, etc.
-  return "AREA_COMUN";
+  return "AREACOMUN";
 };
+
+const formatearTipoSalida = (tipo) => {
+  const normalizado = String(tipo || "").toUpperCase();
+  if (normalizado === "AREACOMUN") return "AREA COMUN";
+  return normalizado.replace(/_/g, " ");
+};
+
+const formatearEspacioSalida = (espacio = {}) => ({
+  ...espacio,
+  tipo: formatearTipoSalida(espacio.tipo),
+});
 
 const crearEspacio = async (req, res) => {
   try {
@@ -54,7 +68,10 @@ const crearEspacio = async (req, res) => {
       },
     });
 
-    return res.status(201).json({ mensaje: "Espacio registrado", espacio });
+    return res.status(201).json({
+      mensaje: "Espacio registrado",
+      espacio: formatearEspacioSalida(espacio),
+    });
   } catch (error) {
     console.error(error);
     if (error.code === "P2002") {
@@ -93,7 +110,7 @@ const getEspacios = async (req, res) => {
       orderBy: [{ tipo: "asc" }, { nombre: "asc" }],
     });
 
-    return res.json(espacios);
+    return res.json(espacios.map(formatearEspacioSalida));
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: "Error al obtener espacios" });
@@ -132,7 +149,10 @@ const actualizarEspacio = async (req, res) => {
       data,
     });
 
-    return res.json({ mensaje: "Espacio actualizado", espacio });
+    return res.json({
+      mensaje: "Espacio actualizado",
+      espacio: formatearEspacioSalida(espacio),
+    });
   } catch (error) {
     console.error(error);
     if (error.code === "P2002") {
@@ -161,7 +181,10 @@ const eliminarEspacio = async (req, res) => {
       data: { activo: false },
     });
 
-    return res.json({ mensaje: "Espacio desactivado", espacio });
+    return res.json({
+      mensaje: "Espacio desactivado",
+      espacio: formatearEspacioSalida(espacio),
+    });
   } catch (error) {
     console.error(error);
     if (error.code === "P2025") {
@@ -291,7 +314,7 @@ const descargarPlantillaEspacios = async (req, res) => {
       {
         CAMPO: "TIPO",
         DESCRIPCION:
-          "Texto libre. Ejemplos: Aula, Laboratorio, Biblioteca, Cancha. Se normaliza internamente a AULA o AREA_COMUN",
+          "Texto libre. Ejemplos: Aula, Laboratorio, Biblioteca, Cancha. Se normaliza internamente a AULA o AREA COMUN",
       },
       {
         CAMPO: "DESCRIPCION",

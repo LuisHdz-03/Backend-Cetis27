@@ -8,19 +8,61 @@ const getJwtSecret = () => {
   return process.env.JWT_SECRET;
 };
 
-const verificarToken = async (req, res, next) => {
-  const authHeader = req.headers["authorization"];
+const parseCookies = (cookieHeader = "") => {
+  return String(cookieHeader)
+    .split(";")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .reduce((acc, pair) => {
+      const separatorIndex = pair.indexOf("=");
+      if (separatorIndex === -1) return acc;
 
-  if (!authHeader) {
-    return res.status(403).json({ error: "Error, no hay token " });
+      const key = pair.slice(0, separatorIndex).trim();
+      const value = pair.slice(separatorIndex + 1).trim();
+
+      if (!key) return acc;
+      acc[key] = decodeURIComponent(value || "");
+      return acc;
+    }, {});
+};
+
+const extractTokenFromRequest = (req) => {
+  const authHeader = req.headers["authorization"];
+  if (authHeader) {
+    const tokenFromAuth = authHeader.startsWith("Bearer ")
+      ? authHeader.slice(7)
+      : authHeader;
+
+    if (tokenFromAuth) return tokenFromAuth.trim();
   }
 
-  const token = authHeader.startsWith("Bearer ")
-    ? authHeader.slice(7, authHeader.length)
-    : authHeader;
+  const tokenHeaders = ["x-access-token", "x-auth-token", "token"];
+  for (const headerName of tokenHeaders) {
+    const candidate = req.headers[headerName];
+    if (candidate && String(candidate).trim()) {
+      return String(candidate).trim();
+    }
+  }
+
+  const cookies = parseCookies(req.headers.cookie || "");
+  const cookieKeys = ["token", "access_token", "authToken", "jwt"];
+  for (const key of cookieKeys) {
+    if (cookies[key] && String(cookies[key]).trim()) {
+      return String(cookies[key]).trim();
+    }
+  }
+
+  return "";
+};
+
+const verificarToken = async (req, res, next) => {
+  const token = extractTokenFromRequest(req);
 
   if (!token) {
-    return res.status(403).json({ error: "Formato de token invalido" });
+    return res.status(403).json({
+      error: "Error, no hay token",
+      ruta: req.originalUrl,
+    });
   }
 
   try {
@@ -70,18 +112,10 @@ const verificarToken = async (req, res, next) => {
 };
 
 const verificarTokenPadre = async (req, res, next) => {
-  const authHeader = req.headers["authorization"];
-
-  if (!authHeader) {
-    return res.status(403).json({ error: "Error, no hay token" });
-  }
-
-  const token = authHeader.startsWith("Bearer ")
-    ? authHeader.slice(7, authHeader.length)
-    : authHeader;
+  const token = extractTokenFromRequest(req);
 
   if (!token) {
-    return res.status(403).json({ error: "Formato de token inválido" });
+    return res.status(403).json({ error: "Error, no hay token" });
   }
 
   try {

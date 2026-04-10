@@ -239,5 +239,5 @@ enum Turno {
 
 enum TipoEspacio {
   AULA
-  AREA_COMUN
+  AREACOMUN
 }
