@@ -8,27 +8,27 @@ datasource db {
 }
 
 model Usuario {
-  idUsuario            Int             @id @default(autoincrement())
-  nombre               String
-  apellidoPaterno      String
-  apellidoMaterno      String
-  username             String          @unique
-  email                String?         @unique
-  password             String
-  rol                  String
-  activo               Boolean         @default(true)
-  passwordChangeRequired Boolean        @default(true)
-  resetPasswordTokenHash String?
+  idUsuario              Int             @id @default(autoincrement())
+  nombre                 String
+  apellidoPaterno        String
+  apellidoMaterno        String
+  username               String          @unique
+  email                  String?         @unique
+  password               String
+  rol                    String
+  activo                 Boolean         @default(true)
+  passwordChangeRequired Boolean         @default(true)
+  creadoEn               DateTime        @default(now())
+  telefono               String?
+  direccion              String?
+  fechaNacimiento        DateTime?
+  curp                   String          @unique
   resetPasswordExpiresAt DateTime?
-  creadoEn             DateTime        @default(now())
-  telefono             String?
-  direccion            String?
-  fechaNacimiento      DateTime?
-  curp                 String          @unique
-  perfilAdministrativo Administrativo?
-  bitacoras            Bitacora[]
-  perfilDocente        Docente?
-  perfilEstudiante     Estudiante?
+  resetPasswordTokenHash String?
+  perfilAdministrativo   Administrativo?
+  bitacoras              Bitacora[]
+  perfilDocente          Docente?
+  perfilEstudiante       Estudiante?
 
   @@map("usuarios")
 }
@@ -40,9 +40,9 @@ model Docente {
   especialidadId    Int?
   fechaContratacion DateTime?
   clases            Clase[]
-  gruposComoTutor   Grupo[]       @relation("GrupoTutor")
   especialidad      Especialidad? @relation(fields: [especialidadId], references: [idEspecialidad])
   usuario           Usuario       @relation(fields: [usuarioId], references: [idUsuario])
+  gruposComoTutor   Grupo[]       @relation("GrupoTutor")
   reportesHechos    Reporte[]     @relation("ReportadoPor")
 
   @@map("docentes")
@@ -115,12 +115,12 @@ model Grupo {
   turno          Turno
   aula           String?
   especialidadId Int
-  docenteTutorId Int
   activo         Boolean      @default(true)
+  docenteTutorId Int
   clases         Clase[]
   estudiantes    Estudiante[]
-  especialidad   Especialidad @relation(fields: [especialidadId], references: [idEspecialidad])
   docenteTutor   Docente      @relation("GrupoTutor", fields: [docenteTutorId], references: [idDocente])
+  especialidad   Especialidad @relation(fields: [especialidadId], references: [idEspecialidad])
 
   @@map("grupos")
 }
@@ -214,19 +214,19 @@ model Administrativo {
   cargo            String
   area             String?
   usuarioId        Int     @unique
+  firmaImagenUrl   String?
   usuario          Usuario @relation(fields: [usuarioId], references: [idUsuario])
-  firmaImagenUrl   String? 
 
   @@map("administrativos")
 }
 
 model Espacio {
-  idEspacio    Int         @id @default(autoincrement())
-  nombre       String      @unique
-  tipo         TipoEspacio
-  descripcion  String?
-  activo       Boolean     @default(true)
-  creadoEn     DateTime    @default(now())
+  idEspacio   Int         @id @default(autoincrement())
+  nombre      String      @unique
+  tipo        TipoEspacio
+  descripcion String?
+  activo      Boolean     @default(true)
+  creadoEn    DateTime    @default(now())
 
   @@map("espacios")
 }
@@ -239,5 +239,5 @@ enum Turno {
 
 enum TipoEspacio {
   AULA
-  AREACOMUN
+  AREA_COMUN
 }
