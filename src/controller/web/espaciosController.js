@@ -3,6 +3,34 @@ const XLSX = require("xlsx");
 
 const tiposValidos = ["AULA", "AREA_COMUN"];
 
+const palabrasAula = [
+  "AULA",
+  "SALON",
+  "SALON DE CLASE",
+  "SALON CLASE",
+  "CLASE",
+];
+
+const normalizarTexto = (valor) =>
+  String(valor || "")
+    .trim()
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
+const mapearTipoEspacio = (tipoEntrada) => {
+  const tipo = normalizarTexto(tipoEntrada);
+
+  if (!tipo) return null;
+  if (tiposValidos.includes(tipo)) return tipo;
+
+  if (palabrasAula.includes(tipo)) return "AULA";
+
+  // Cualquier otro texto libre se considera AREA_COMUN
+  // Ejemplos: LABORATORIO, BIBLIOTECA, CANCHA, PATIO, TALLER, etc.
+  return "AREA_COMUN";
+};
+
 const crearEspacio = async (req, res) => {
   try {
     const { nombre, tipo, descripcion } = req.body;
@@ -11,10 +39,10 @@ const crearEspacio = async (req, res) => {
       return res.status(400).json({ error: "nombre y tipo son obligatorios" });
     }
 
-    const tipoNormalizado = String(tipo).trim().toUpperCase();
-    if (!tiposValidos.includes(tipoNormalizado)) {
+    const tipoNormalizado = mapearTipoEspacio(tipo);
+    if (!tipoNormalizado) {
       return res.status(400).json({
-        error: "tipo inválido. Debe ser AULA o AREA_COMUN",
+        error: "tipo inválido",
       });
     }
 
@@ -51,11 +79,11 @@ const getEspacios = async (req, res) => {
     }
 
     if (tipo) {
-      const tipoNormalizado = String(tipo).trim().toUpperCase();
-      if (!tiposValidos.includes(tipoNormalizado)) {
+      const tipoNormalizado = mapearTipoEspacio(tipo);
+      if (!tipoNormalizado) {
         return res
           .status(400)
-          .json({ error: "tipo inválido. Debe ser AULA o AREA_COMUN" });
+          .json({ error: "tipo inválido" });
       }
       where.tipo = tipoNormalizado;
     }
@@ -90,10 +118,10 @@ const actualizarEspacio = async (req, res) => {
     if (activo !== undefined) data.activo = Boolean(activo);
 
     if (tipo !== undefined) {
-      const tipoNormalizado = String(tipo).trim().toUpperCase();
-      if (!tiposValidos.includes(tipoNormalizado)) {
+      const tipoNormalizado = mapearTipoEspacio(tipo);
+      if (!tipoNormalizado) {
         return res.status(400).json({
-          error: "tipo inválido. Debe ser AULA o AREA_COMUN",
+          error: "tipo inválido",
         });
       }
       data.tipo = tipoNormalizado;
@@ -168,9 +196,8 @@ const cargarEspaciosMasivos = async (req, res) => {
       const numeroFila = i + 2; // +2 por cabecera de Excel
 
       const nombre = String(fila["NOMBRE"] || "").trim();
-      const tipo = String(fila["TIPO"] || "")
-        .trim()
-        .toUpperCase();
+      const tipoEntrada = fila["TIPO"];
+      const tipo = mapearTipoEspacio(tipoEntrada);
       const descripcionRaw = fila["DESCRIPCION"];
       const descripcion = descripcionRaw ? String(descripcionRaw).trim() : null;
 
@@ -182,10 +209,10 @@ const cargarEspaciosMasivos = async (req, res) => {
         continue;
       }
 
-      if (!tiposValidos.includes(tipo)) {
+      if (!tipo) {
         errores.push({
           fila: numeroFila,
-          error: "TIPO inválido. Debe ser AULA o AREA_COMUN",
+          error: "TIPO inválido",
         });
         continue;
       }
@@ -251,7 +278,7 @@ const descargarPlantillaEspacios = async (req, res) => {
       },
       {
         NOMBRE: "Patio Central",
-        TIPO: "AREA_COMUN",
+        TIPO: "Laboratorio",
         DESCRIPCION: "Zona principal de convivencia",
       },
     ];
@@ -261,7 +288,11 @@ const descargarPlantillaEspacios = async (req, res) => {
         CAMPO: "NOMBRE",
         DESCRIPCION: "Nombre del espacio (obligatorio y único)",
       },
-      { CAMPO: "TIPO", DESCRIPCION: "Valores permitidos: AULA o AREA_COMUN" },
+      {
+        CAMPO: "TIPO",
+        DESCRIPCION:
+          "Texto libre. Ejemplos: Aula, Laboratorio, Biblioteca, Cancha. Se normaliza internamente a AULA o AREA_COMUN",
+      },
       {
         CAMPO: "DESCRIPCION",
         DESCRIPCION: "Descripción del espacio (opcional)",
