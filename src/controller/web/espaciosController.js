@@ -1,4 +1,5 @@
 const prisma = require("../../config/prisma");
+const XLSX = require("xlsx");
 
 const tiposValidos = ["AULA", "AREA_COMUN"];
 
@@ -142,9 +143,162 @@ const eliminarEspacio = async (req, res) => {
   }
 };
 
+const cargarEspaciosMasivos = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ ok: false, error: "No se subió archivo" });
+    }
+
+    const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const datosExcel = XLSX.utils.sheet_to_json(sheet);
+
+    if (!Array.isArray(datosExcel) || datosExcel.length === 0) {
+      return res.status(400).json({
+        ok: false,
+        error: "El archivo no contiene filas para procesar",
+      });
+    }
+
+    const errores = [];
+    const procesados = [];
+
+    for (let i = 0; i < datosExcel.length; i++) {
+      const fila = datosExcel[i];
+      const numeroFila = i + 2; // +2 por cabecera de Excel
+
+      const nombre = String(fila["NOMBRE"] || "").trim();
+      const tipo = String(fila["TIPO"] || "")
+        .trim()
+        .toUpperCase();
+      const descripcionRaw = fila["DESCRIPCION"];
+      const descripcion = descripcionRaw ? String(descripcionRaw).trim() : null;
+
+      if (!nombre || !tipo) {
+        errores.push({
+          fila: numeroFila,
+          error: "NOMBRE y TIPO son obligatorios",
+        });
+        continue;
+      }
+
+      if (!tiposValidos.includes(tipo)) {
+        errores.push({
+          fila: numeroFila,
+          error: "TIPO inválido. Debe ser AULA o AREA_COMUN",
+        });
+        continue;
+      }
+
+      try {
+        const existente = await prisma.espacio.findFirst({
+          where: { nombre },
+          select: { idEspacio: true },
+        });
+
+        if (existente) {
+          await prisma.espacio.update({
+            where: { idEspacio: existente.idEspacio },
+            data: {
+              tipo,
+              descripcion,
+              activo: true,
+            },
+          });
+
+          procesados.push({ nombre, accion: "actualizado" });
+        } else {
+          await prisma.espacio.create({
+            data: {
+              nombre,
+              tipo,
+              descripcion,
+            },
+          });
+
+          procesados.push({ nombre, accion: "creado" });
+        }
+      } catch (error) {
+        console.error(`Error procesando espacio en fila ${numeroFila}:`, error);
+        errores.push({
+          fila: numeroFila,
+          error: "Error al procesar la fila",
+        });
+      }
+    }
+
+    return res.json({
+      ok: errores.length === 0,
+      mensaje: `Carga masiva finalizada. Procesados: ${procesados.length}. Errores: ${errores.length}`,
+      procesados,
+      errores,
+    });
+  } catch (error) {
+    console.error("Error en carga masiva de espacios:", error);
+    return res
+      .status(500)
+      .json({ ok: false, error: "Error al cargar espacios masivamente" });
+  }
+};
+
+const descargarPlantillaEspacios = async (req, res) => {
+  try {
+    const filasEjemplo = [
+      {
+        NOMBRE: "Aula A-101",
+        TIPO: "AULA",
+        DESCRIPCION: "Primer piso, edificio A",
+      },
+      {
+        NOMBRE: "Patio Central",
+        TIPO: "AREA_COMUN",
+        DESCRIPCION: "Zona principal de convivencia",
+      },
+    ];
+
+    const instrucciones = [
+      {
+        CAMPO: "NOMBRE",
+        DESCRIPCION: "Nombre del espacio (obligatorio y único)",
+      },
+      { CAMPO: "TIPO", DESCRIPCION: "Valores permitidos: AULA o AREA_COMUN" },
+      {
+        CAMPO: "DESCRIPCION",
+        DESCRIPCION: "Descripción del espacio (opcional)",
+      },
+    ];
+
+    const wb = XLSX.utils.book_new();
+    const wsEjemplo = XLSX.utils.json_to_sheet(filasEjemplo);
+    const wsInstrucciones = XLSX.utils.json_to_sheet(instrucciones);
+    XLSX.utils.book_append_sheet(wb, wsEjemplo, "Plantilla_Espacios");
+    XLSX.utils.book_append_sheet(wb, wsInstrucciones, "Instrucciones");
+
+    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    res.setHeader(
+      "Content-Disposition",
+      'attachment; filename="plantilla_espacios.xlsx"',
+    );
+
+    return res.send(buffer);
+  } catch (error) {
+    console.error("Error al generar plantilla de espacios:", error);
+    return res
+      .status(500)
+      .json({ error: "Error al generar plantilla de espacios" });
+  }
+};
+
 module.exports = {
   crearEspacio,
   getEspacios,
   actualizarEspacio,
   eliminarEspacio,
+  cargarEspaciosMasivos,
+  descargarPlantillaEspacios,
 };
