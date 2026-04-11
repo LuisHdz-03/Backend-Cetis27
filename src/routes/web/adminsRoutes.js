@@ -4,7 +4,10 @@ const multer = require("multer");
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
-const { verificarToken, soloDirectivo } = require("../../middlewares/authMiddleware");
+const {
+  verificarToken,
+  soloDirectivo,
+} = require("../../middlewares/authMiddleware");
 const {
   bitacoraCrear,
   bitacoraActualizar,
@@ -24,9 +27,27 @@ const {
   subirFirmaDirector,
 } = require("../../controller/web/administrativoController");
 
-router.post("/", verificarToken, soloDirectivo, bitacoraCrear, crearAdministrativo);
-router.get("/", verificarToken, soloDirectivo, bitacoraConsultar, getAdministrativos);
-router.post("/asignar-materia", verificarToken, soloDirectivo, bitacoraCrear, asignarMateria);
+router.post(
+  "/",
+  verificarToken,
+  soloDirectivo,
+  bitacoraCrear,
+  crearAdministrativo,
+);
+router.get(
+  "/",
+  verificarToken,
+  soloDirectivo,
+  bitacoraConsultar,
+  getAdministrativos,
+);
+router.post(
+  "/asignar-materia",
+  verificarToken,
+  soloDirectivo,
+  bitacoraCrear,
+  asignarMateria,
+);
 router.post(
   "/masivo",
   verificarToken,
@@ -49,7 +70,13 @@ router.put(
   bitacoraActualizar,
   actualizarAdministrativo,
 );
-router.delete("/:id", verificarToken, soloDirectivo, bitacoraEliminar, eliminarAdministrativo);
+router.delete(
+  "/:id",
+  verificarToken,
+  soloDirectivo,
+  bitacoraEliminar,
+  eliminarAdministrativo,
+);
 router.post(
   "/firma/subir",
   verificarToken,
