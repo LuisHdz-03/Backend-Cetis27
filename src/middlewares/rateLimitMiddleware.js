@@ -13,13 +13,13 @@ const loginLimiter = rateLimit({
 });
 
 const parentAccessLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 6,
+  windowMs: 5 * 60 * 1000, // 5 minutos
+  max: 20, // hasta 20 intentos
   standardHeaders: true,
   legacyHeaders: false,
   message: {
     error:
-      "Demasiados intentos de acceso de tutor. Intenta nuevamente en 15 minutos.",
+      "Demasiados intentos de acceso de tutor. Intenta nuevamente en 5 minutos.",
   },
   skipSuccessfulRequests: true,
 });
