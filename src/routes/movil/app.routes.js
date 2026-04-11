@@ -21,7 +21,10 @@ const {
   getReportesEstudianteMovil,
   cambiarContrasenia,
   verificarFirmaCredencial,
+  actualizarDatosContacto,
 } = require("../../controller/movil/estudianteMoController");
+// Endpoint para que el alumno actualice su correo, teléfono y dirección
+router.put("/perfil/contacto", bitacoraActualizar, actualizarDatosContacto);
 
 router.get("/", (req, res) => {
   res.json({ mensaje: "Bienvenido a la App Móvil (Estudiantes/Docentes)" });
@@ -47,7 +50,6 @@ router.post(
   bitacoraActualizar,
   guardarDisenioCredencialMovil,
 );
-// Verificar firma sin autenticación (público, cualquiera puede validar una credencial)
 router.post("/credencial/verificar-firma", verificarFirmaCredencial);
 
 router.get("/accesos", bitacoraConsultar, getHistorialAccesos);

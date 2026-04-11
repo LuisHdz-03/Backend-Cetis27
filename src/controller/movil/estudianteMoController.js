@@ -1,3 +1,65 @@
+// Permite al alumno actualizar su correo, teléfono y dirección desde la app móvil
+const actualizarDatosContacto = async (req, res) => {
+  try {
+    const idUsuario = req.usuario.id;
+    const { email, telefono, direccion } = req.body;
+
+    if (email === undefined && telefono === undefined && direccion === undefined) {
+      return res.status(400).json({ error: "Debes enviar al menos uno de estos campos: email, telefono, direccion" });
+    }
+
+    const dataUpdate = {};
+    if (email !== undefined) {
+      const emailNormalizado = String(email || "").trim().toLowerCase();
+      if (!emailNormalizado) {
+        return res.status(400).json({ error: "El correo no puede estar vacío" });
+      }
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(emailNormalizado)) {
+        return res.status(400).json({ error: "El formato del correo no es válido" });
+      }
+      dataUpdate.email = emailNormalizado;
+    }
+    if (telefono !== undefined) {
+      const telefonoNormalizado = String(telefono || "").trim();
+      if (!telefonoNormalizado) {
+        return res.status(400).json({ error: "El teléfono no puede estar vacío" });
+      }
+      const telefonoRegex = /^\d{10}$/;
+      if (!telefonoRegex.test(telefonoNormalizado)) {
+        return res.status(400).json({ error: "El teléfono debe tener 10 dígitos" });
+      }
+      dataUpdate.telefono = telefonoNormalizado;
+    }
+    if (direccion !== undefined) {
+      const direccionNormalizada = String(direccion || "").trim();
+      if (!direccionNormalizada) {
+        return res.status(400).json({ error: "La dirección no puede estar vacía" });
+      }
+      dataUpdate.direccion = direccionNormalizada;
+    }
+
+    const usuarioActualizado = await prisma.usuario.update({
+      where: { idUsuario },
+      data: dataUpdate,
+      select: {
+        idUsuario: true,
+        email: true,
+        telefono: true,
+        direccion: true,
+      },
+    });
+
+    return res.json({
+      ok: true,
+      mensaje: "Datos de contacto actualizados correctamente",
+      usuario: usuarioActualizado,
+    });
+  } catch (error) {
+    console.error("Error al actualizar datos de contacto:", error);
+    res.status(500).json({ error: "Error al actualizar los datos de contacto" });
+  }
+};
 const prisma = require("../../config/prisma");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
@@ -935,4 +997,5 @@ module.exports = {
   getAsistenciasPadre,
   getReportesPadre,
   verificarFirmaCredencial,
+  actualizarDatosContacto,
 };
