@@ -19,9 +19,7 @@ const getJwtSecret = () => {
 const login = async (req, res) => {
   try {
     const { username, password, plataforma } = req.body;
-    const usernameNormalizado = String(username || "")
-      .trim()
-      .toLowerCase();
+    const usernameNormalizado = String(username || "").trim();
 
     if (!usernameNormalizado || !password || !plataforma) {
       return res

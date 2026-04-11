@@ -712,10 +712,10 @@ const procesarImagenFirma = async (buffer) => {
 
     img = img
       .png()
-      .removeAlpha() 
-      .flatten({ background: { r: 255, g: 255, b: 255 } }) 
-      .threshold(240) 
-      .toColourspace('b-w'); 
+      .removeAlpha()
+      .flatten({ background: { r: 255, g: 255, b: 255 } })
+      .threshold(240)
+      .toColourspace("b-w");
 
     // Devuelve PNG
     return await img.png().toBuffer();
@@ -734,7 +734,6 @@ const subirFirmaDirector = async (req, res) => {
       return res.status(400).json({ error: "Debes subir una imagen" });
     }
 
-
     const admin = await prisma.administrativo.findFirst({
       where: { usuarioId: req.usuario.id },
     });
@@ -745,12 +744,13 @@ const subirFirmaDirector = async (req, res) => {
         .json({ error: "No se encontró el perfil administrativo." });
     }
 
-
     let imagenProcesada;
     try {
       imagenProcesada = await procesarImagenFirma(archivo.buffer);
     } catch (err) {
-      return res.status(500).json({ error: "Error al procesar la imagen de la firma." });
+      return res
+        .status(500)
+        .json({ error: "Error al procesar la imagen de la firma." });
     }
 
     let uploadResult;
@@ -771,7 +771,9 @@ const subirFirmaDirector = async (req, res) => {
         stream.end(imagenProcesada);
       });
     } catch (err) {
-      return res.status(500).json({ error: "Error al subir la imagen a Cloudinary." });
+      return res
+        .status(500)
+        .json({ error: "Error al subir la imagen a Cloudinary." });
     }
 
     try {
@@ -780,7 +782,11 @@ const subirFirmaDirector = async (req, res) => {
         data: { firmaImagenUrl: uploadResult.secure_url },
       });
     } catch (err) {
-      return res.status(500).json({ error: "Error al guardar la URL de la firma en la base de datos." });
+      return res
+        .status(500)
+        .json({
+          error: "Error al guardar la URL de la firma en la base de datos.",
+        });
     }
 
     res.json({
@@ -796,6 +802,44 @@ const subirFirmaDirector = async (req, res) => {
   }
 };
 
+// Obtener nombre, cargo y firma del director activo
+const obtenerDirectorActivo = async (req, res) => {
+  try {
+    // Buscar administrativo con cargo DIRECTOR y usuario activo
+    const director = await prisma.administrativo.findFirst({
+      where: {
+        cargo: "DIRECTOR",
+        usuario: { activo: true },
+      },
+      include: {
+        usuario: true,
+      },
+    });
+
+    if (!director) {
+      return res
+        .status(404)
+        .json({ ok: false, error: "No hay director activo registrado." });
+    }
+
+    // Solo nombre del director o directora
+    const nombreCompleto =
+      director.usuario.nombre +
+      (director.usuario.apellidoPaterno ? " " + director.usuario.apellidoPaterno : "") +
+      (director.usuario.apellidoMaterno ? " " + director.usuario.apellidoMaterno : "");
+
+    res.json({
+      ok: true,
+      director: nombreCompleto,
+    });
+  } catch (error) {
+    console.error("Error al obtener director activo:", error);
+    res
+      .status(500)
+      .json({ ok: false, error: "Error interno al buscar director." });
+  }
+};
+
 module.exports = {
   crearAdministrativo,
   getAdministrativos,
@@ -805,4 +849,5 @@ module.exports = {
   eliminarAdministrativo,
   descargarPlantillaAdministrativos,
   subirFirmaDirector,
+  obtenerDirectorActivo,
 };

@@ -497,8 +497,9 @@ const getCredencial = async (req, res) => {
       fotoUrl: estudiante.fotoUrl || null,
       qrPayload,
       qrBase64,
-      firmante,
-      imagenFirmaDirector: firmante.firmaImagenUrl || null,
+      director: firmante.nombre || null, // Solo nombre del director
+      // firmante,
+      // imagenFirmaDirector: firmante.firmaImagenUrl || null,
     };
 
     // Generar firma digital de la credencial
@@ -506,11 +507,11 @@ const getCredencial = async (req, res) => {
     respuesta.firmaDigital = firmaDigital;
 
     // Imprimimos en la terminal del backend para verificar que sí manda los datos
-    console.log("Datos enviados a la app:", {
+    console.log("Datos enviados a la app (solo nombre director):", {
       curp: respuesta.curp,
       grupo: respuesta.grupo,
+      director: respuesta.director,
       firmaHashCortada: firmaDigital.substring(0, 20) + "...",
-      tieneImagenFirma: !!respuesta.firmante.firmaImagenUrl,
     });
 
     res.json(respuesta);

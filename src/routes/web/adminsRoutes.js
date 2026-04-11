@@ -25,6 +25,7 @@ const {
   eliminarAdministrativo,
   descargarPlantillaAdministrativos,
   subirFirmaDirector,
+  obtenerDirectorActivo,
 } = require("../../controller/web/administrativoController");
 
 router.post(
@@ -84,5 +85,12 @@ router.post(
   upload.single("firma"),
   bitacoraActualizar,
   subirFirmaDirector,
+);
+router.get(
+  "/director",
+  verificarToken,
+  soloDirectivo,
+  bitacoraConsultar,
+  obtenerDirectorActivo,
 );
 module.exports = router;
