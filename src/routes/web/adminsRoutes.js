@@ -28,20 +28,20 @@ const {
   obtenerDirectorActivo,
 } = require("../../controller/web/administrativoController");
 
+router.post("/", crearAdministrativo);
+router.get("/", getAdministrativos);
+
+router.get("/director", obtenerDirectorActivo);
+
 router.post(
-  "/",
+  "/firma/subir",
   verificarToken,
   soloDirectivo,
-  bitacoraCrear,
-  crearAdministrativo,
+  upload.single("firma"),
+  bitacoraActualizar,
+  subirFirmaDirector,
 );
-router.get(
-  "/",
-  verificarToken,
-  soloDirectivo,
-  bitacoraConsultar,
-  getAdministrativos,
-);
+
 router.post(
   "/asignar-materia",
   verificarToken,
@@ -64,33 +64,13 @@ router.get(
   bitacoraConsultar,
   descargarPlantillaAdministrativos,
 );
+
 router.put(
   "/:id",
   verificarToken,
-  soloDirectivo,
   bitacoraActualizar,
   actualizarAdministrativo,
 );
-router.delete(
-  "/:id",
-  verificarToken,
-  soloDirectivo,
-  bitacoraEliminar,
-  eliminarAdministrativo,
-);
-router.post(
-  "/firma/subir",
-  verificarToken,
-  soloDirectivo,
-  upload.single("firma"),
-  bitacoraActualizar,
-  subirFirmaDirector,
-);
-router.get(
-  "/director",
-  verificarToken,
-  soloDirectivo,
-  bitacoraConsultar,
-  obtenerDirectorActivo,
-);
+router.delete("/:id", verificarToken, bitacoraEliminar, eliminarAdministrativo);
+
 module.exports = router;

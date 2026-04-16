@@ -782,11 +782,9 @@ const subirFirmaDirector = async (req, res) => {
         data: { firmaImagenUrl: uploadResult.secure_url },
       });
     } catch (err) {
-      return res
-        .status(500)
-        .json({
-          error: "Error al guardar la URL de la firma en la base de datos.",
-        });
+      return res.status(500).json({
+        error: "Error al guardar la URL de la firma en la base de datos.",
+      });
     }
 
     res.json({
@@ -802,10 +800,8 @@ const subirFirmaDirector = async (req, res) => {
   }
 };
 
-// Obtener nombre, cargo y firma del director activo
 const obtenerDirectorActivo = async (req, res) => {
   try {
-    // Buscar administrativo con cargo DIRECTOR y usuario activo
     const director = await prisma.administrativo.findFirst({
       where: {
         cargo: "DIRECTOR",
@@ -822,15 +818,21 @@ const obtenerDirectorActivo = async (req, res) => {
         .json({ ok: false, error: "No hay director activo registrado." });
     }
 
-    // Solo nombre del director o directora
     const nombreCompleto =
       director.usuario.nombre +
-      (director.usuario.apellidoPaterno ? " " + director.usuario.apellidoPaterno : "") +
-      (director.usuario.apellidoMaterno ? " " + director.usuario.apellidoMaterno : "");
+      (director.usuario.apellidoPaterno
+        ? " " + director.usuario.apellidoPaterno
+        : "") +
+      (director.usuario.apellidoMaterno
+        ? " " + director.usuario.apellidoMaterno
+        : "");
 
+    // CAMBIO AQUÍ: Enviamos las propiedades que el frontend espera
     res.json({
       ok: true,
-      director: nombreCompleto,
+      nombre: nombreCompleto, // Antes decía 'director'
+      cargo: cargoParaMostrar[director.cargo] || director.cargo, // Agregamos el cargo
+      firmaImagenUrl: director.firmaImagenUrl || null, // Agregamos la firma
     });
   } catch (error) {
     console.error("Error al obtener director activo:", error);
