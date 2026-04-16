@@ -8,68 +8,66 @@ const getJwtSecret = () => {
   return process.env.JWT_SECRET;
 };
 
-const parseCookies = (cookieHeader = "") => {
-  return String(cookieHeader)
-    .split(";")
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .reduce((acc, pair) => {
-      const separatorIndex = pair.indexOf("=");
-      if (separatorIndex === -1) return acc;
-
-      const key = pair.slice(0, separatorIndex).trim();
-      const value = pair.slice(separatorIndex + 1).trim();
-
-      if (!key) return acc;
-      acc[key] = decodeURIComponent(value || "");
-      return acc;
-    }, {});
-};
-
+/**
+ * Utilidad para extraer el token de diferentes fuentes (Header, Custom Headers, Cookies)
+ */
 const extractTokenFromRequest = (req) => {
+  // 1. Authorization Header
   const authHeader = req.headers["authorization"];
   if (authHeader) {
-    const tokenFromAuth = authHeader.startsWith("Bearer ")
-      ? authHeader.slice(7)
-      : authHeader;
-
-    if (tokenFromAuth) return tokenFromAuth.trim();
+    return authHeader.startsWith("Bearer ")
+      ? authHeader.slice(7).trim()
+      : authHeader.trim();
   }
 
+  // 2. Custom Headers
   const tokenHeaders = ["x-access-token", "x-auth-token", "token"];
   for (const headerName of tokenHeaders) {
     const candidate = req.headers[headerName];
-    if (candidate && String(candidate).trim()) {
-      return String(candidate).trim();
+    if (candidate) return String(candidate).trim();
+  }
+
+  // 3. Cookies
+  if (req.headers.cookie) {
+    const cookies = req.headers.cookie.split(";").reduce((acc, cookie) => {
+      const [key, value] = cookie.split("=").map((c) => c.trim());
+      acc[key] = value;
+      return acc;
+    }, {});
+
+    const cookieKeys = ["token", "access_token", "authToken", "jwt"];
+    for (const key of cookieKeys) {
+      if (cookies[key]) return decodeURIComponent(cookies[key]).trim();
     }
   }
 
-  const cookies = parseCookies(req.headers.cookie || "");
-  const cookieKeys = ["token", "access_token", "authToken", "jwt"];
-  for (const key of cookieKeys) {
-    if (cookies[key] && String(cookies[key]).trim()) {
-      return String(cookies[key]).trim();
-    }
-  }
-
-  return "";
+  return null;
 };
 
+/**
+ * Middleware principal de autenticación
+ */
 const verificarToken = async (req, res, next) => {
   const token = extractTokenFromRequest(req);
 
   if (!token) {
-    return res.status(403).json({
-      error: "Error, no hay token",
-      ruta: req.originalUrl,
-    });
+    return res
+      .status(401)
+      .json({ error: "No se proporcionó un token de acceso." });
   }
 
   try {
     const decoded = jwt.verify(token, getJwtSecret());
 
+    const userId = parseInt(decoded.id, 10);
+    if (isNaN(userId)) {
+      return res
+        .status(401)
+        .json({ error: "Token malformado: ID de usuario inválido." });
+    }
+
     const usuarioActual = await prisma.usuario.findUnique({
-      where: { idUsuario: parseInt(decoded.id, 10) },
+      where: { idUsuario: userId },
       select: {
         idUsuario: true,
         rol: true,
@@ -79,19 +77,25 @@ const verificarToken = async (req, res, next) => {
     });
 
     if (!usuarioActual) {
-      return res.status(401).json({ error: "Token inválido: usuario no existe" });
+      return res
+        .status(401)
+        .json({ error: "El usuario ya no existe en el sistema." });
     }
 
     if (!usuarioActual.activo) {
-      return res.status(403).json({ error: "Cuenta desactivada" });
+      return res
+        .status(403)
+        .json({ error: "Esta cuenta ha sido desactivada." });
     }
 
+    // Verificar si el rol en el token coincide con la DB (Seguridad ante cambios de permisos)
     if ((decoded.rol || "").toUpperCase() !== usuarioActual.rol.toUpperCase()) {
       return res.status(401).json({
-        error: "Sesión desactualizada por cambio de permisos. Inicia sesión nuevamente.",
+        error: "Tus permisos han cambiado. Por favor, inicia sesión de nuevo.",
       });
     }
 
+    // Inyectar datos limpios en la request
     req.usuario = {
       ...decoded,
       id: usuarioActual.idUsuario,
@@ -102,133 +106,57 @@ const verificarToken = async (req, res, next) => {
 
     next();
   } catch (err) {
-    if (err.name === "TokenExpiredError" || err.name === "JsonWebTokenError") {
-      return res.status(401).json({ error: "Token invalido o expirado" });
+    if (err.name === "TokenExpiredError") {
+      return res
+        .status(401)
+        .json({ error: "Tu sesión ha expirado. Ingresa de nuevo." });
+    }
+    if (err.name === "JsonWebTokenError") {
+      return res.status(401).json({ error: "Token de seguridad inválido." });
     }
 
-    console.error("Error validando token:", err);
-    return res.status(500).json({ error: "Error interno al validar autenticación" });
-  }
-};
-
-const verificarTokenPadre = async (req, res, next) => {
-  const token = extractTokenFromRequest(req);
-
-  if (!token) {
-    return res.status(403).json({ error: "Error, no hay token" });
-  }
-
-  try {
-    const decoded = jwt.verify(token, getJwtSecret());
-
-    if (!decoded || decoded.tipoAcceso !== "PADRE") {
-      return res.status(403).json({ error: "Token no autorizado para acceso de padre" });
-    }
-
-    const estudiante = await prisma.estudiante.findUnique({
-      where: { idEstudiante: parseInt(decoded.alumnoId, 10) },
-      include: {
-        usuario: { select: { activo: true } },
-      },
-    });
-
-    if (!estudiante || !estudiante.usuario?.activo) {
-      return res.status(401).json({
-        error: "Acceso de padre inválido: alumno no disponible o inactivo",
-      });
-    }
-
-    req.usuario = decoded;
-    next();
-  } catch (err) {
-    if (err.name === "TokenExpiredError" || err.name === "JsonWebTokenError") {
-      return res.status(401).json({ error: "Token inválido o expirado" });
-    }
-    console.error("Error validando token de padre:", err);
-    return res.status(500).json({ error: "Error interno al validar autenticación" });
-  }
-};
-const soloAdmin = (req, res, next) => {
-  if (req.usuario.rol !== "ADMINISTRATIVO" && req.usuario.rol !== "DIRECTIVO") {
+    console.error("Error en verificarToken:", err.message);
     return res
-      .status(403)
-      .json({ error: "Requiere privilegios de Administrador." });
+      .status(500)
+      .json({ error: "Error de conexión con el servidor de seguridad." });
   }
-  next();
 };
 
 /**
- * Middleware flexible para verificar roles
- * @param {...string} rolesPermitidos - Lista de roles permitidos
- * @returns {Function} Middleware que verifica si el usuario tiene alguno de los roles
- *
- * Ejemplo de uso:
- * router.get("/ruta", verificarToken, verificarRol("ADMIN", "DIRECTIVO"), controlador);
+ * Middleware de autorización por roles
  */
 const verificarRol = (...rolesPermitidos) => {
   return (req, res, next) => {
-    // Verificar si existe el usuario (debe haber pasado por verificarToken)
     if (!req.usuario) {
-      return res.status(401).json({
-        error: "No autenticado. Debe proporcionar un token válido.",
-      });
+      return res.status(401).json({ error: "Autenticación requerida." });
     }
 
-    // Verificar si el usuario tiene alguno de los roles permitidos
     const rolUsuario = req.usuario.rol?.toUpperCase();
-    const rolesNormalizados = rolesPermitidos.map((rol) => rol.toUpperCase());
+    const rolesNormalizados = rolesPermitidos.map((r) => r.toUpperCase());
 
     if (!rolesNormalizados.includes(rolUsuario)) {
       return res.status(403).json({
-        error: `Acceso denegado. Se requiere uno de estos roles: ${rolesPermitidos.join(", ")}`,
-        rolActual: req.usuario.rol,
+        error: "No tienes permisos suficientes para realizar esta acción.",
+        rolRequerido: rolesPermitidos.join(" o "),
       });
     }
-
     next();
   };
 };
 
-/**
- * Middleware para verificar que el usuario esté activo
- */
-const verificarActivo = (req, res, next) => {
-  if (!req.usuario) {
-    return res.status(401).json({
-      error: "No autenticado.",
-    });
-  }
-
-  if (req.usuario.activo === false) {
-    return res.status(403).json({
-      error: "Tu cuenta está desactivada. Contacta al administrador.",
-    });
-  }
-
-  next();
-};
-
-/**
- * Middlewares predefinidos para roles específicos
- */
+// Middlewares predefinidos listos para usar
 const soloDocente = verificarRol("DOCENTE");
 const soloAlumno = verificarRol("ALUMNO");
 const soloDirectivo = verificarRol("DIRECTIVO");
 const soloGuardia = verificarRol("GUARDIA");
 const adminODirectivo = verificarRol("ADMINISTRATIVO", "DIRECTIVO");
-const docenteODirectivo = verificarRol("DOCENTE", "DIRECTIVO");
 
 module.exports = {
   verificarToken,
-  verificarTokenPadre,
-  soloAdmin,
   verificarRol,
-  verificarActivo,
-  // Exportar middlewares predefinidos
   soloDocente,
   soloAlumno,
   soloDirectivo,
   soloGuardia,
   adminODirectivo,
-  docenteODirectivo,
 };

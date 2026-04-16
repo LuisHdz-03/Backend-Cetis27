@@ -127,7 +127,7 @@ const crearAdministrativo = async (req, res) => {
       apellidoPaterno,
       apellidoMaterno,
       curp,
-      password,
+      password, 
       cargo,
       area,
       numeroEmpleado,
@@ -135,7 +135,16 @@ const crearAdministrativo = async (req, res) => {
       telefono,
     } = req.body;
 
-    // Validar cargo permitido
+    if (!numeroEmpleado || String(numeroEmpleado).trim() === "") {
+      return res.status(400).json({ error: "El Número de Empleado es obligatorio (se utiliza como nombre de usuario)." });
+    }
+    if (!curp || String(curp).trim() === "") {
+      return res.status(400).json({ error: "La CURP es obligatoria." });
+    }
+    if (!nombre || String(nombre).trim() === "") {
+      return res.status(400).json({ error: "El nombre es obligatorio." });
+    }
+
     const cargoNormalizado = normalizarCargo(cargo);
     if (!cargoNormalizado) {
       return res.status(400).json({
@@ -147,9 +156,13 @@ const crearAdministrativo = async (req, res) => {
 
     const numEmpleadoLimpio = limpiarMatricula(numeroEmpleado);
     const fechaNac = extraerFechaDesdeCURP(curp);
-    const usernameGenerado = numEmpleadoLimpio;
+    const usernameGenerado = numEmpleadoLimpio; 
     const emailNormalizado = email ? email.trim().toLowerCase() : null;
     const passwordInicial = extraerFechaPasswordDesdeCURP(curp);
+
+    if (!passwordInicial) {
+       return res.status(400).json({ error: "No se pudo generar una contraseña inicial. Asegúrate de que la CURP tenga el formato correcto (mínimo 10 caracteres)." });
+    }
 
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(passwordInicial, salt);
@@ -162,7 +175,7 @@ const crearAdministrativo = async (req, res) => {
           nombre,
           apellidoPaterno,
           apellidoMaterno,
-          username: usernameGenerado,
+          username: usernameGenerado, 
           email: emailNormalizado,
           curp: curp.trim().toUpperCase(),
           fechaNacimiento: fechaNac,
@@ -176,7 +189,7 @@ const crearAdministrativo = async (req, res) => {
 
       const perfil = await tx.administrativo.create({
         data: {
-          numeroEmpleado: numeroEmpleado ? numEmpleadoLimpio : null,
+          numeroEmpleado: numEmpleadoLimpio, 
           cargo: cargoNormalizado,
           area: area || "Administración General",
           usuarioId: usuario.idUsuario,

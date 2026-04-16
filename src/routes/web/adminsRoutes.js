@@ -28,8 +28,20 @@ const {
   obtenerDirectorActivo,
 } = require("../../controller/web/administrativoController");
 
-router.post("/", crearAdministrativo);
-router.get("/", getAdministrativos);
+router.post(
+  "/",
+  verificarToken,
+  soloDirectivo,
+  bitacoraCrear,
+  crearAdministrativo,
+);
+router.get(
+  "/",
+  verificarToken,
+  soloDirectivo,
+  bitacoraConsultar,
+  getAdministrativos,
+);
 
 router.get("/director", obtenerDirectorActivo);
 
@@ -68,9 +80,16 @@ router.get(
 router.put(
   "/:id",
   verificarToken,
+  soloDirectivo,
   bitacoraActualizar,
   actualizarAdministrativo,
 );
-router.delete("/:id", verificarToken, bitacoraEliminar, eliminarAdministrativo);
+router.delete(
+  "/:id",
+  verificarToken,
+  soloDirectivo,
+  bitacoraEliminar,
+  eliminarAdministrativo,
+);
 
 module.exports = router;
