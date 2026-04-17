@@ -14,7 +14,7 @@ const {
 } = require("../../controller/web/espaciosController");
 
 const {
-  verificarToken,
+  
   adminODirectivo,
 } = require("../../middlewares/authMiddleware");
 
@@ -26,11 +26,11 @@ const {
   bitacoraCargaMasiva,
 } = require("../../middlewares/bitacoraMiddleware");
 
-router.post("/", verificarToken, adminODirectivo, bitacoraCrear, crearEspacio);
-router.get("/", verificarToken, bitacoraConsultar, getEspacios);
+router.post("/", adminODirectivo, bitacoraCrear, crearEspacio);
+router.get("/", bitacoraConsultar, getEspacios);
 router.post(
   "/masivo",
-  verificarToken,
+  
   adminODirectivo,
   upload.single("archivoExcel"),
   bitacoraCargaMasiva,
@@ -38,21 +38,21 @@ router.post(
 );
 router.get(
   "/plantilla/excel",
-  verificarToken,
+  
   adminODirectivo,
   bitacoraConsultar,
   descargarPlantillaEspacios,
 );
 router.put(
   "/:id",
-  verificarToken,
+  
   adminODirectivo,
   bitacoraActualizar,
   actualizarEspacio,
 );
 router.delete(
   "/:id",
-  verificarToken,
+  
   adminODirectivo,
   bitacoraEliminar,
   eliminarEspacio,

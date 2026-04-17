@@ -14,7 +14,7 @@ const {
   cargarAsistenciasMasivas,
 } = require("../../controller/web/asistenciaController");
 
-const { verificarToken, verificarRol } = require("../../middlewares/authMiddleware");
+const { verificarRol } = require("../../middlewares/authMiddleware");
 const {
   bitacoraCrear,
   bitacoraActualizar,
@@ -24,49 +24,42 @@ const {
 
 router.post(
   "/",
-  verificarToken,
   verificarRol("ADMINISTRATIVO", "DIRECTIVO", "PREFECTO", "DOCENTE"),
   bitacoraCrear,
   registrarAsistencia,
 );
 router.get(
   "/",
-  verificarToken,
   verificarRol("ADMINISTRATIVO", "DIRECTIVO", "PREFECTO", "DOCENTE"),
   bitacoraConsultar,
   getAsisPorFecha,
 );
 router.put(
   "/:idAsistencia",
-  verificarToken,
   verificarRol("ADMINISTRATIVO", "DIRECTIVO", "PREFECTO"),
   bitacoraActualizar,
   justificarFalta,
 );
 router.get(
   "/historial",
-  verificarToken,
   verificarRol("ADMINISTRATIVO", "DIRECTIVO", "PREFECTO", "DOCENTE"),
   bitacoraConsultar,
   getHistorialAsistencias,
 );
 router.get(
   "/historial/excel",
-  verificarToken,
   verificarRol("ADMINISTRATIVO", "DIRECTIVO", "PREFECTO", "DOCENTE"),
   bitacoraConsultar,
   exportarHistorialAsistenciasExcel,
 );
 router.get(
   "/plantilla/excel",
-  verificarToken,
   verificarRol("ADMINISTRATIVO", "DIRECTIVO", "PREFECTO", "DOCENTE"),
   bitacoraConsultar,
   descargarPlantillaAsistencias,
 );
 router.post(
   "/masivo",
-  verificarToken,
   verificarRol("ADMINISTRATIVO", "DIRECTIVO", "PREFECTO", "DOCENTE"),
   upload.single("archivoExcel"),
   bitacoraCargaMasiva,

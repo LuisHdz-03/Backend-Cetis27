@@ -4,10 +4,8 @@ const multer = require("multer");
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
-const {
-  verificarToken,
-  soloDirectivo,
-} = require("../../middlewares/authMiddleware");
+// Importamos solo los roles y la bitácora (verificarToken ya se aplicó globalmente en admin.routes.js)
+const { soloDirectivo } = require("../../middlewares/authMiddleware");
 const {
   bitacoraCrear,
   bitacoraActualizar,
@@ -20,7 +18,6 @@ const {
   crearAdministrativo,
   getAdministrativos,
   cargarAdministrativosMasivos,
-  asignarMateria,
   actualizarAdministrativo,
   eliminarAdministrativo,
   descargarPlantillaAdministrativos,
@@ -28,68 +25,38 @@ const {
   obtenerDirectorActivo,
 } = require("../../controller/web/administrativoController");
 
-router.post(
-  "/",
-  verificarToken,
-  soloDirectivo,
-  bitacoraCrear,
-  crearAdministrativo,
-);
+// RUTAS ESTÁTICAS (Siempre deben ir antes de las rutas con :id)
+router.get("/director", obtenerDirectorActivo);
+
 router.get(
-  "/",
-  verificarToken,
+  "/plantilla/excel",
   soloDirectivo,
   bitacoraConsultar,
-  getAdministrativos,
+  descargarPlantillaAdministrativos,
 );
 
-router.get("/director", obtenerDirectorActivo);
+router.post(
+  "/masivo",
+  soloDirectivo,
+  upload.single("archivoExcel"),
+  bitacoraCargaMasiva,
+  cargarAdministrativosMasivos,
+);
 
 router.post(
   "/firma/subir",
-  verificarToken,
   soloDirectivo,
   upload.single("firma"),
   bitacoraActualizar,
   subirFirmaDirector,
 );
 
-router.post(
-  "/asignar-materia",
-  verificarToken,
-  soloDirectivo,
-  bitacoraCrear,
-  asignarMateria,
-);
-router.post(
-  "/masivo",
-  verificarToken,
-  soloDirectivo,
-  upload.single("archivoExcel"),
-  bitacoraCargaMasiva,
-  cargarAdministrativosMasivos,
-);
-router.get(
-  "/plantilla/excel",
-  verificarToken,
-  soloDirectivo,
-  bitacoraConsultar,
-  descargarPlantillaAdministrativos,
-);
+// RUTAS BASE
+router.get("/", soloDirectivo, bitacoraConsultar, getAdministrativos);
+router.post("/", soloDirectivo, bitacoraCrear, crearAdministrativo);
 
-router.put(
-  "/:id",
-  verificarToken,
-  soloDirectivo,
-  bitacoraActualizar,
-  actualizarAdministrativo,
-);
-router.delete(
-  "/:id",
-  verificarToken,
-  soloDirectivo,
-  bitacoraEliminar,
-  eliminarAdministrativo,
-);
+// RUTAS DINÁMICAS (Con :id)
+router.put("/:id", soloDirectivo, bitacoraActualizar, actualizarAdministrativo);
+router.delete("/:id", soloDirectivo, bitacoraEliminar, eliminarAdministrativo);
 
 module.exports = router;
