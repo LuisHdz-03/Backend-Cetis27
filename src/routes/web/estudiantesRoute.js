@@ -23,6 +23,14 @@ const {
   descargarPlantillaEstudiantes,
 } = require("../../controller/web/estudianteController");
 
+// Obtener datos para credenciales (para frontend)
+router.get(
+  "/credenciales",
+  adminODirectivo,
+  bitacoraConsultar,
+  require("../../controller/web/estudianteController").getDatosCredenciales
+);
+
 // ...existing code...
 router.post("/", adminODirectivo, bitacoraCrear, crearEstudiante);
 router.get("/", adminODirectivo, bitacoraConsultar, getEstudiantes);

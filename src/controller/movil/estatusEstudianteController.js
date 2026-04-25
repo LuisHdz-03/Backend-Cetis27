@@ -1,0 +1,180 @@
+// Controlador para que el padre/tutor consulte el estatus del estudiante
+const prisma = require("../../config/prisma");
+
+const consultarEstatusEstudiante = async (req, res) => {
+  try {
+    const { idEstudiante } = req.params;
+    const estudiante = await prisma.estudiante.findUnique({
+      where: { idEstudiante: Number(idEstudiante) },
+      include: {
+        usuario: {
+          select: {
+            nombre: true,
+            apellidoPaterno: true,
+            apellidoMaterno: true,
+            email: true,
+            telefono: true,
+            direccion: true,
+            curp: true,
+            activo: true,
+          },
+        },
+        grupo: {
+          select: {
+            nombre: true,
+            grado: true,
+            turno: true,
+            especialidad: { select: { nombre: true } },
+          },
+        },
+      },
+    });
+    if (!estudiante) {
+      return res.status(404).json({ mensaje: "Estudiante no encontrado." });
+    }
+    res.json({
+      ok: true,
+      estudiante,
+    });
+  } catch (error) {
+    console.error("Error al consultar estatus del estudiante:", error);
+    res
+      .status(500)
+      .json({ error: "Error al consultar estatus del estudiante" });
+  }
+};
+
+// Consulta resumen, asistencias y reportes del alumno
+const consultarEstatusCompletoEstudiante = async (req, res) => {
+  try {
+    const { idEstudiante } = req.params;
+    // Resumen
+    const estudiante = await prisma.estudiante.findUnique({
+      where: { idEstudiante: Number(idEstudiante) },
+      include: {
+        usuario: {
+          select: {
+            nombre: true,
+            apellidoPaterno: true,
+            apellidoMaterno: true,
+            curp: true,
+          },
+        },
+        grupo: {
+          include: {
+            especialidad: { select: { nombre: true } },
+          },
+        },
+      },
+    });
+    if (!estudiante) {
+      return res.status(404).json({ error: "Alumno no encontrado" });
+    }
+    // Asistencias
+    const asistencias = await prisma.asistencia.findMany({
+      where: { alumnoId: estudiante.idEstudiante },
+      include: {
+        clase: {
+          include: {
+            materias: { select: { nombre: true } },
+          },
+        },
+      },
+      orderBy: { fecha: "desc" },
+    });
+    // Reportes
+    const reportes = await prisma.reporte.findMany({
+      where: { alumnoId: estudiante.idEstudiante },
+      include: {
+        docente: {
+          include: {
+            usuario: { select: { nombre: true, apellidoPaterno: true } },
+          },
+        },
+      },
+      orderBy: { fecha: "desc" },
+    });
+    // Formateo
+    const resumen = {
+      idEstudiante: estudiante.idEstudiante,
+      matricula: estudiante.matricula,
+      nombreCompleto:
+        `${estudiante.usuario.nombre} ${estudiante.usuario.apellidoPaterno} ${estudiante.usuario.apellidoMaterno || ""}`.trim(),
+      curp: estudiante.usuario.curp,
+      grupo: estudiante.grupo,
+    };
+    const asistenciasLimpias = asistencias.map((a) => ({
+      idAsistencia: a.idAsistencia,
+      fecha: a.fecha,
+      estatus: a.estatus,
+      materia: a.clase?.materias?.nombre || "Sin materia",
+    }));
+    const reportesLimpios = reportes.map((r) => ({
+      idReporte: r.idReporte,
+      titulo: r.titulo,
+      descripcion: r.descripcion,
+      tipoIncidencia: r.tipoIncidencia,
+      nivel: r.nivel,
+      estatus: r.estatus,
+      fecha: r.fecha,
+      accionesTomadas: r.accionesTomadas,
+      docente: r.docente
+        ? `${r.docente.usuario.nombre} ${r.docente.usuario.apellidoPaterno}`
+        : "Administración",
+    }));
+    res.json({
+      ok: true,
+      resumen,
+      asistencias: asistenciasLimpias,
+      reportes: reportesLimpios,
+    });
+  } catch (error) {
+    console.error("Error al consultar estatus completo del estudiante:", error);
+    res.status(500).json({ error: "Error al consultar estatus completo del estudiante" });
+  }
+};
+
+// Login de padres/tutores por tokenPadre
+const loginPadrePorToken = async (req, res) => {
+  const { tokenPadre } = req.body;
+  if (!tokenPadre || typeof tokenPadre !== "string" || tokenPadre.length !== 10) {
+    return res.status(400).json({ error: "Token inválido" });
+  }
+  try {
+    const estudiante = await prisma.estudiante.findUnique({
+      where: { tokenPadre },
+      include: {
+        usuario: {
+          select: {
+            nombre: true,
+            apellidoPaterno: true,
+            apellidoMaterno: true,
+            curp: true,
+          },
+        },
+      },
+    });
+    if (!estudiante) {
+      return res.status(404).json({ error: "Token no válido o estudiante no encontrado" });
+    }
+    res.json({
+      ok: true,
+      estudiante: {
+        idEstudiante: estudiante.idEstudiante,
+        nombreCompleto: `${estudiante.usuario.nombre} ${estudiante.usuario.apellidoPaterno} ${estudiante.usuario.apellidoMaterno}`.trim(),
+        curp: estudiante.usuario.curp,
+        tokenPadre: estudiante.tokenPadre,
+      },
+      mensaje: "Inicio de sesión exitoso. Usa el idEstudiante para consultar el historial.",
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error en el servidor" });
+  }
+};
+
+module.exports = {
+  consultarEstatusEstudiante,
+  consultarEstatusCompletoEstudiante,
+  loginPadrePorToken,
+};

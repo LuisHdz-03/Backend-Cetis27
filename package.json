@@ -29,7 +29,6 @@
   },
   "devDependencies": {
     "@prisma/client": "^5.22.0",
-    "@types/node": "^25.1.0",
     "nodemon": "^3.1.11",
     "prisma": "^5.22.0"
   }

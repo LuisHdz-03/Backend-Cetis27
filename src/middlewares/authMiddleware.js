@@ -147,9 +147,14 @@ const verificarRol = (...rolesPermitidos) => {
 // Middlewares predefinidos listos para usar
 const soloDocente = verificarRol("DOCENTE");
 const soloAlumno = verificarRol("ALUMNO");
-const soloDirectivo = verificarRol("DIRECTIVO");
+const soloDirectivo = verificarRol("ADMINISTRATIVO", "DIRECTIVO");
 const soloGuardia = verificarRol("GUARDIA");
 const adminODirectivo = verificarRol("ADMINISTRATIVO", "DIRECTIVO");
+const accesoEspecialidades = verificarRol(
+  "ADMINISTRATIVO",
+  "DIRECTIVO",
+  "DOCENTE",
+);
 
 module.exports = {
   verificarToken,
@@ -159,4 +164,5 @@ module.exports = {
   soloDirectivo,
   soloGuardia,
   adminODirectivo,
+  accesoEspecialidades,
 };

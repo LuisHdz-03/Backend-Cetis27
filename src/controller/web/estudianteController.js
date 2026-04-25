@@ -2,6 +2,25 @@ const prisma = require("../../config/prisma");
 const bcrypt = require("bcryptjs");
 const XLSX = require("xlsx");
 
+// Generador de token alfanumérico único de 10 caracteres
+const generarTokenPadre = async (tx) => {
+  const caracteres =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  let token;
+  let existe = true;
+  while (existe) {
+    token = Array.from(
+      { length: 10 },
+      () => caracteres[Math.floor(Math.random() * caracteres.length)],
+    ).join("");
+    const encontrado = await tx.estudiante.findUnique({
+      where: { tokenPadre: token },
+    });
+    existe = !!encontrado;
+  }
+  return token;
+};
+
 // logica para limpiar la matricula
 const limpiarMatricula = (valor) => {
   const numStr = String(valor);
@@ -87,6 +106,9 @@ const crearEstudiante = async (req, res) => {
       const fechaExpiracionAuto = new Date();
       fechaExpiracionAuto.setFullYear(fechaEmisionAuto.getFullYear() + 3);
 
+      // Generar tokenPadre único
+      const tokenPadre = await generarTokenPadre(tx);
+
       const nuevoEstudiante = await tx.estudiante.create({
         data: {
           matricula: matriculaLimpia,
@@ -95,6 +117,7 @@ const crearEstudiante = async (req, res) => {
           grupoId: grupoId ? parseInt(grupoId) : null,
           credencialFechaEmision: fechaEmisionAuto,
           credencialFechaExpiracion: fechaExpiracionAuto,
+          tokenPadre,
         },
       });
 
@@ -105,8 +128,9 @@ const crearEstudiante = async (req, res) => {
       credenciales: {
         username: resultado.usuario.username,
         password_inicial: passwordInicial,
+        tokenPadre: resultado.estudiante.tokenPadre,
         aviso:
-          "El usuario debe cambiar la contraseña en el primer inicio de sesión.",
+          "El usuario debe cambiar la contraseña en el primer inicio de sesión. El tokenPadre es para acceso de padres/tutores.",
       },
     });
   } catch (error) {
@@ -278,6 +302,11 @@ const cargarDatosMasivos = async (req, res) => {
             if (grupoEncontrado.idGrupo !== estudianteExistente.grupoId)
               estudianteUpdate.grupoId = grupoEncontrado.idGrupo;
 
+            // Mantenemos el tokenPadre que ya tenga si existe, si no, le generamos uno
+            if (!estudianteExistente.tokenPadre) {
+              estudianteUpdate.tokenPadre = await generarTokenPadre(tx);
+            }
+
             if (Object.keys(estudianteUpdate).length > 0) {
               await tx.estudiante.update({
                 where: { idEstudiante: estudianteExistente.idEstudiante },
@@ -301,6 +330,9 @@ const cargarDatosMasivos = async (req, res) => {
               },
             });
 
+            // Generar token para inserción masiva
+            const tokenPadre = await generarTokenPadre(tx);
+
             await tx.estudiante.create({
               data: {
                 matricula: matriculaLimpia,
@@ -309,6 +341,7 @@ const cargarDatosMasivos = async (req, res) => {
                 grupoId: grupoEncontrado.idGrupo,
                 credencialFechaEmision: fechaEmisionAuto,
                 credencialFechaExpiracion: fechaExpiracionAuto,
+                tokenPadre,
               },
             });
           }
@@ -600,6 +633,59 @@ const descargarPlantillaEstudiantes = async (req, res) => {
   }
 };
 
+const getDatosCredenciales = async (req, res) => {
+  try {
+    const { grupoId } = req.query;
+
+    const where = grupoId ? { grupoId: parseInt(grupoId) } : {};
+
+    const estudiantes = await prisma.estudiante.findMany({
+      where,
+      include: {
+        usuario: {
+          select: {
+            nombre: true,
+            apellidoPaterno: true,
+            apellidoMaterno: true,
+            curp: true,
+            email: true,
+            activo: true,
+          },
+        },
+        grupo: {
+          select: {
+            nombre: true,
+            turno: true,
+            especialidad: { select: { nombre: true } },
+          },
+        },
+      },
+    });
+
+    // Filtrar solo usuarios activos
+    const resultado = estudiantes
+      .filter((e) => e.usuario && e.usuario.activo)
+      .map((e) => ({
+        nombre: e.usuario.nombre,
+        apellidoPaterno: e.usuario.apellidoPaterno,
+        apellidoMaterno: e.usuario.apellidoMaterno,
+        curp: e.usuario.curp,
+        noControl: e.matricula,
+        fotoUrl: e.fotoUrl || null,
+        grupo: e.grupo?.nombre || null,
+        especialidad: e.grupo?.especialidad?.nombre || null,
+        turno: e.grupo?.turno || null,
+        emision: e.credencialFechaEmision || null,
+        vigencia: e.credencialFechaExpiracion || null,
+      }));
+
+    res.json(resultado);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error al obtener datos de credenciales" });
+  }
+};
+
 module.exports = {
   crearEstudiante,
   getEstudiantes,
@@ -608,4 +694,5 @@ module.exports = {
   eliminarEstudiante,
   getEstudiantesPorGrupo,
   descargarPlantillaEstudiantes,
+  getDatosCredenciales,
 };

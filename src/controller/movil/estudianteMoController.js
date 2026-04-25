@@ -4,37 +4,56 @@ const actualizarDatosContacto = async (req, res) => {
     const idUsuario = req.usuario.id;
     const { email, telefono, direccion } = req.body;
 
-    if (email === undefined && telefono === undefined && direccion === undefined) {
-      return res.status(400).json({ error: "Debes enviar al menos uno de estos campos: email, telefono, direccion" });
+    if (
+      email === undefined &&
+      telefono === undefined &&
+      direccion === undefined
+    ) {
+      return res.status(400).json({
+        error:
+          "Debes enviar al menos uno de estos campos: email, telefono, direccion",
+      });
     }
 
     const dataUpdate = {};
     if (email !== undefined) {
-      const emailNormalizado = String(email || "").trim().toLowerCase();
+      const emailNormalizado = String(email || "")
+        .trim()
+        .toLowerCase();
       if (!emailNormalizado) {
-        return res.status(400).json({ error: "El correo no puede estar vacío" });
+        return res
+          .status(400)
+          .json({ error: "El correo no puede estar vacío" });
       }
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(emailNormalizado)) {
-        return res.status(400).json({ error: "El formato del correo no es válido" });
+        return res
+          .status(400)
+          .json({ error: "El formato del correo no es válido" });
       }
       dataUpdate.email = emailNormalizado;
     }
     if (telefono !== undefined) {
       const telefonoNormalizado = String(telefono || "").trim();
       if (!telefonoNormalizado) {
-        return res.status(400).json({ error: "El teléfono no puede estar vacío" });
+        return res
+          .status(400)
+          .json({ error: "El teléfono no puede estar vacío" });
       }
       const telefonoRegex = /^\d{10}$/;
       if (!telefonoRegex.test(telefonoNormalizado)) {
-        return res.status(400).json({ error: "El teléfono debe tener 10 dígitos" });
+        return res
+          .status(400)
+          .json({ error: "El teléfono debe tener 10 dígitos" });
       }
       dataUpdate.telefono = telefonoNormalizado;
     }
     if (direccion !== undefined) {
       const direccionNormalizada = String(direccion || "").trim();
       if (!direccionNormalizada) {
-        return res.status(400).json({ error: "La dirección no puede estar vacía" });
+        return res
+          .status(400)
+          .json({ error: "La dirección no puede estar vacía" });
       }
       dataUpdate.direccion = direccionNormalizada;
     }
@@ -57,7 +76,9 @@ const actualizarDatosContacto = async (req, res) => {
     });
   } catch (error) {
     console.error("Error al actualizar datos de contacto:", error);
-    res.status(500).json({ error: "Error al actualizar los datos de contacto" });
+    res
+      .status(500)
+      .json({ error: "Error al actualizar los datos de contacto" });
   }
 };
 const prisma = require("../../config/prisma");
@@ -240,7 +261,7 @@ const getAlumnosMovil = async (req, res) => {
             especialidad: { select: { nombre: true } },
             clases: {
               where: {
-                periodo: { activo: true }, 
+                periodo: { activo: true },
               },
               include: {
                 materias: true,
@@ -716,218 +737,6 @@ const cambiarContrasenia = async (req, res) => {
   }
 };
 
-const loginPadrePorAlumno = async (req, res) => {
-  try {
-    const { matricula, curp } = req.body;
-
-    const matriculaNormalizada = String(matricula || "").trim();
-    const curpNormalizada = String(curp || "")
-      .trim()
-      .toUpperCase();
-
-    if (!matriculaNormalizada || !curpNormalizada) {
-      return res
-        .status(400)
-        .json({ error: "Debes enviar matrícula y CURP del alumno" });
-    }
-
-    const estudiante = await prisma.estudiante.findFirst({
-      where: {
-        matricula: matriculaNormalizada,
-        usuario: {
-          curp: curpNormalizada,
-          activo: true,
-        },
-      },
-      include: {
-        usuario: {
-          select: {
-            nombre: true,
-            apellidoPaterno: true,
-            apellidoMaterno: true,
-          },
-        },
-        grupo: {
-          select: {
-            nombre: true,
-            grado: true,
-            turno: true,
-          },
-        },
-      },
-    });
-
-    if (!estudiante) {
-      return res.status(401).json({ error: "Datos de acceso inválidos" });
-    }
-
-    const tokenPadre = jwt.sign(
-      {
-        tipoAcceso: "PADRE",
-        alumnoId: estudiante.idEstudiante,
-      },
-      getJwtSecret(),
-      { expiresIn: "2h" },
-    );
-
-    return res.json({
-      ok: true,
-      mensaje: "Acceso de padre autorizado",
-      token: tokenPadre,
-      alumno: {
-        idEstudiante: estudiante.idEstudiante,
-        nombreCompleto:
-          `${estudiante.usuario.nombre} ${estudiante.usuario.apellidoPaterno} ${estudiante.usuario.apellidoMaterno || ""}`.trim(),
-        matricula: estudiante.matricula,
-        grupo: estudiante.grupo,
-      },
-    });
-  } catch (error) {
-    console.error("Error en login de padre:", error);
-    return res.status(500).json({ error: "Error interno del servidor" });
-  }
-};
-
-const getResumenAlumnoPadre = async (req, res) => {
-  try {
-    const alumnoId = req.usuario.alumnoId;
-
-    const estudiante = await prisma.estudiante.findUnique({
-      where: { idEstudiante: parseInt(alumnoId, 10) },
-      include: {
-        usuario: {
-          select: {
-            nombre: true,
-            apellidoPaterno: true,
-            apellidoMaterno: true,
-            curp: true,
-          },
-        },
-        grupo: {
-          include: {
-            especialidad: {
-              select: { nombre: true },
-            },
-          },
-        },
-      },
-    });
-
-    if (!estudiante) {
-      return res.status(404).json({ error: "Alumno no encontrado" });
-    }
-
-    return res.json({
-      idEstudiante: estudiante.idEstudiante,
-      matricula: estudiante.matricula,
-      nombreCompleto:
-        `${estudiante.usuario.nombre} ${estudiante.usuario.apellidoPaterno} ${estudiante.usuario.apellidoMaterno || ""}`.trim(),
-      curp: estudiante.usuario.curp,
-      grupo: estudiante.grupo,
-    });
-  } catch (error) {
-    console.error(error);
-    return res
-      .status(500)
-      .json({ error: "Error al obtener resumen del alumno" });
-  }
-};
-
-const getAsistenciasPadre = async (req, res) => {
-  try {
-    const alumnoId = req.usuario.alumnoId;
-    const { fechaInicio, fechaFin } = req.query;
-
-    const where = {
-      alumnoId: parseInt(alumnoId, 10),
-    };
-
-    if (fechaInicio || fechaFin) {
-      where.fecha = {};
-      if (fechaInicio) {
-        const inicio = new Date(fechaInicio);
-        inicio.setHours(0, 0, 0, 0);
-        where.fecha.gte = inicio;
-      }
-      if (fechaFin) {
-        const fin = new Date(fechaFin);
-        fin.setHours(23, 59, 59, 999);
-        where.fecha.lte = fin;
-      }
-    }
-
-    const asistencias = await prisma.asistencia.findMany({
-      where,
-      include: {
-        clase: {
-          include: {
-            materias: {
-              select: { nombre: true },
-            },
-          },
-        },
-      },
-      orderBy: { fecha: "desc" },
-    });
-
-    return res.json(
-      asistencias.map((a) => ({
-        idAsistencia: a.idAsistencia,
-        fecha: a.fecha,
-        estatus: a.estatus,
-        materia: a.clase?.materias?.nombre || "Sin materia",
-      })),
-    );
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ error: "Error al obtener asistencias" });
-  }
-};
-
-const getReportesPadre = async (req, res) => {
-  try {
-    const alumnoId = req.usuario.alumnoId;
-
-    const reportes = await prisma.reporte.findMany({
-      where: {
-        alumnoId: parseInt(alumnoId, 10),
-      },
-      include: {
-        docente: {
-          include: {
-            usuario: {
-              select: {
-                nombre: true,
-                apellidoPaterno: true,
-              },
-            },
-          },
-        },
-      },
-      orderBy: { fecha: "desc" },
-    });
-
-    return res.json(
-      reportes.map((r) => ({
-        idReporte: r.idReporte,
-        titulo: r.titulo,
-        descripcion: r.descripcion,
-        tipoIncidencia: r.tipoIncidencia,
-        nivel: r.nivel,
-        estatus: r.estatus,
-        fecha: r.fecha,
-        accionesTomadas: r.accionesTomadas,
-        docente: r.docente
-          ? `${r.docente.usuario.nombre} ${r.docente.usuario.apellidoPaterno}`
-          : "Administración",
-      })),
-    );
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ error: "Error al obtener reportes" });
-  }
-};
-
 // Endpoint para verificar la firma digital de una credencial
 const verificarFirmaCredencial = async (req, res) => {
   try {
@@ -993,10 +802,6 @@ module.exports = {
   getHistorialAccesos,
   getReportesEstudianteMovil,
   cambiarContrasenia,
-  loginPadrePorAlumno,
-  getResumenAlumnoPadre,
-  getAsistenciasPadre,
-  getReportesPadre,
   verificarFirmaCredencial,
   actualizarDatosContacto,
 };

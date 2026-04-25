@@ -60,6 +60,7 @@ model Estudiante {
   usuarioId                 Int          @unique
   grupoId                   Int?
   tutorId                   Int?
+  tokenPadre                String?      @unique 
   acceso                    Accesos[]
   asistencias               Asistencia[]
   grupo                     Grupo?       @relation(fields: [grupoId], references: [idGrupo])

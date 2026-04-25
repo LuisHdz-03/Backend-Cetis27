@@ -31,6 +31,10 @@ router.use("/especialidades", require("./especialidadRoute"));
 router.use("/espacios", require("./espaciosRoute"));
 
 // Gestión Diaria
+
+
+// Ya no se expone endpoint para generación de credenciales. Solo datos.
+
 router.use("/asistencias", require("./asistenciaRoute"));
 router.use("/incidencias", require("./reporteRoute"));
 router.use("/accesos", require("./accesosRoute"));

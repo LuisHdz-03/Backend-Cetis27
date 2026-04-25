@@ -60,6 +60,7 @@ const cargosFront = [
   "Jefe de Departamento",
   "Secretario",
   "Prefecto",
+  "Guardia",
 ];
 
 const cargosPermitidos = cargosFront.map((c) => normalizarTexto(c));
@@ -127,7 +128,7 @@ const crearAdministrativo = async (req, res) => {
       apellidoPaterno,
       apellidoMaterno,
       curp,
-      password, 
+      password,
       cargo,
       area,
       numeroEmpleado,
@@ -136,7 +137,10 @@ const crearAdministrativo = async (req, res) => {
     } = req.body;
 
     if (!numeroEmpleado || String(numeroEmpleado).trim() === "") {
-      return res.status(400).json({ error: "El Número de Empleado es obligatorio (se utiliza como nombre de usuario)." });
+      return res.status(400).json({
+        error:
+          "El Número de Empleado es obligatorio (se utiliza como nombre de usuario).",
+      });
     }
     if (!curp || String(curp).trim() === "") {
       return res.status(400).json({ error: "La CURP es obligatoria." });
@@ -156,12 +160,15 @@ const crearAdministrativo = async (req, res) => {
 
     const numEmpleadoLimpio = limpiarMatricula(numeroEmpleado);
     const fechaNac = extraerFechaDesdeCURP(curp);
-    const usernameGenerado = numEmpleadoLimpio; 
+    const usernameGenerado = numEmpleadoLimpio;
     const emailNormalizado = email ? email.trim().toLowerCase() : null;
     const passwordInicial = extraerFechaPasswordDesdeCURP(curp);
 
     if (!passwordInicial) {
-       return res.status(400).json({ error: "No se pudo generar una contraseña inicial. Asegúrate de que la CURP tenga el formato correcto (mínimo 10 caracteres)." });
+      return res.status(400).json({
+        error:
+          "No se pudo generar una contraseña inicial. Asegúrate de que la CURP tenga el formato correcto (mínimo 10 caracteres).",
+      });
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -175,7 +182,7 @@ const crearAdministrativo = async (req, res) => {
           nombre,
           apellidoPaterno,
           apellidoMaterno,
-          username: usernameGenerado, 
+          username: usernameGenerado,
           email: emailNormalizado,
           curp: curp.trim().toUpperCase(),
           fechaNacimiento: fechaNac,
@@ -189,7 +196,7 @@ const crearAdministrativo = async (req, res) => {
 
       const perfil = await tx.administrativo.create({
         data: {
-          numeroEmpleado: numEmpleadoLimpio, 
+          numeroEmpleado: numEmpleadoLimpio,
           cargo: cargoNormalizado,
           area: area || "Administración General",
           usuarioId: usuario.idUsuario,
@@ -225,6 +232,11 @@ const crearAdministrativo = async (req, res) => {
 const getAdministrativos = async (req, res) => {
   try {
     const admins = await prisma.administrativo.findMany({
+      where: {
+        usuario: {
+          activo: true,
+        },
+      },
       include: {
         usuario: {
           select: {
@@ -614,7 +626,7 @@ const eliminarAdministrativo = async (req, res) => {
         .json({ ok: false, error: "ID de administrador inválido" });
     }
 
-    // 1. Buscamos al administrador para saber cuál es su usuarioId
+    // Buscamos al administrativo para obtener el usuarioId
     const admin = await prisma.administrativo.findUnique({
       where: { idAdministrativo: adminId },
     });
@@ -625,35 +637,18 @@ const eliminarAdministrativo = async (req, res) => {
         .json({ ok: false, error: "Administrador no encontrado" });
     }
 
-    // 2. Eliminamos en cascada (Administrativo y luego Usuario) usando una transacción
-    await prisma.$transaction(async (tx) => {
-      // Primero borramos el registro hijo (administrativo)
-      await tx.administrativo.delete({
-        where: { idAdministrativo: adminId },
-      });
-
-      // Luego borramos el registro padre (usuario)
-      await tx.usuario.delete({
-        where: { idUsuario: admin.usuarioId },
-      });
+    // Solo desactivamos el usuario (no el administrativo)
+    await prisma.usuario.update({
+      where: { idUsuario: admin.usuarioId },
+      data: { activo: false },
     });
 
-    res.json({ ok: true, mensaje: "Administrador eliminado correctamente" });
+    res.json({ ok: true, mensaje: "Administrador desactivado correctamente" });
   } catch (error) {
-    console.error("Error al eliminar administrador:", error);
-
-    // Código P2003: Falla de llave foránea
-    if (error.code === "P2003") {
-      return res.status(400).json({
-        ok: false,
-        error:
-          "No se puede eliminar porque este administrador tiene dependencias asignadas.",
-      });
-    }
-
+    console.error("Error al desactivar administrador:", error);
     res.status(500).json({
       ok: false,
-      error: "Error interno al intentar eliminar al administrador",
+      error: "Error interno al intentar desactivar al administrador",
     });
   }
 };
@@ -717,28 +712,36 @@ const descargarPlantillaAdministrativos = async (req, res) => {
 
 const procesarImagenFirma = async (buffer) => {
   try {
-    // Redimensionar para normalizar
-    let img = sharp(buffer).resize(300, 100, {
-      fit: "inside",
-      withoutEnlargement: true,
-    });
+    const baseImage = sharp(buffer)
+      .resize(300, 100, {
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+      .greyscale()
+      .threshold(200);
 
-    img = img
+    const maskBuffer = await baseImage.clone().negate().toBuffer();
+    const metadata = await baseImage.metadata();
+
+    const transparentSignature = await sharp({
+      create: {
+        width: metadata.width,
+        height: metadata.height,
+        channels: 3,
+        background: { r: 0, g: 0, b: 0 },
+      },
+    })
+      .joinChannel(maskBuffer)
       .png()
-      .removeAlpha()
-      .flatten({ background: { r: 255, g: 255, b: 255 } })
-      .threshold(240)
-      .toColourspace("b-w");
+      .toBuffer();
 
-    // Devuelve PNG
-    return await img.png().toBuffer();
+    return transparentSignature;
   } catch (error) {
     console.error("Error procesando imagen de firma:", error);
     throw error;
   }
 };
 
-// Endpoint para subir y procesar la firma de un director
 const subirFirmaDirector = async (req, res) => {
   try {
     const archivo = req.file;
@@ -826,9 +829,13 @@ const obtenerDirectorActivo = async (req, res) => {
     });
 
     if (!director) {
-      return res
-        .status(404)
-        .json({ ok: false, error: "No hay director activo registrado." });
+      // No hay director activo, pero respondemos ok: true y valores nulos
+      return res.json({
+        ok: true,
+        nombre: null,
+        cargo: null,
+        firmaImagenUrl: null,
+      });
     }
 
     const nombreCompleto =

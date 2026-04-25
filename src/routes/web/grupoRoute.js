@@ -37,7 +37,6 @@ router.post(
 );
 router.get(
   "/plantilla/excel",
-  verificarToken,
   adminODirectivo,
   bitacoraConsultar,
   descargarPlantillaGrupos,
