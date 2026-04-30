@@ -8,17 +8,19 @@ const {
   loginPadrePorAlumno,
 } = require("../../controller/movil/estudianteMoController");
 const {
-  consultarEstatusCompletoEstudiante
+  consultarEstatusCompletoEstudiante,
 } = require("../../controller/movil/estatusEstudianteController");
-const { loginPadre } = require("../../controller/web/padresController");
-
+const { loginPadre, grupoEstudiante } = require("../../controller/web/padresController");
 
 router.get(
   "/estatus-completo/:idEstudiante",
   consultarEstatusCompletoEstudiante,
 );
 
+
 router.post("/login", loginPadre);
 
-module.exports = router;
+// Ruta para consultar solo el grupo del estudiante
+router.get("/grupo/:idEstudiante", grupoEstudiante);
+
 module.exports = router;

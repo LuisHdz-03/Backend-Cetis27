@@ -385,6 +385,7 @@ const actualizarEstudiante = async (req, res) => {
       semestre,
       grupoId,
       tutor,
+      email, // <-- Hacemos email opcional
     } = req.body;
 
     const estudianteExistente = await prisma.estudiante.findUnique({

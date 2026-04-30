@@ -82,6 +82,16 @@ const consultarEstatusCompletoEstudiante = async (req, res) => {
       },
       orderBy: { fecha: "desc" },
     });
+    // Entradas y salidas (accesos)
+    const accesos = await prisma.accesos.findMany({
+      where: { alumnoId: estudiante.idEstudiante },
+      orderBy: { fechaHora: "desc" },
+      select: {
+        idAcceso: true,
+        fechaHora: true,
+        tipo: true,
+      },
+    });
     // Reportes
     const reportes = await prisma.reporte.findMany({
       where: { alumnoId: estudiante.idEstudiante },
@@ -109,6 +119,11 @@ const consultarEstatusCompletoEstudiante = async (req, res) => {
       estatus: a.estatus,
       materia: a.clase?.materias?.nombre || "Sin materia",
     }));
+    const accesosLimpios = accesos.map((ac) => ({
+      idAcceso: ac.idAcceso,
+      fechaHora: ac.fechaHora,
+      tipo: ac.tipo,
+    }));
     const reportesLimpios = reportes.map((r) => ({
       idReporte: r.idReporte,
       titulo: r.titulo,
@@ -126,6 +141,7 @@ const consultarEstatusCompletoEstudiante = async (req, res) => {
       ok: true,
       resumen,
       asistencias: asistenciasLimpias,
+      accesos: accesosLimpios,
       reportes: reportesLimpios,
     });
   } catch (error) {

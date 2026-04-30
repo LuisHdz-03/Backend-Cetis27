@@ -43,9 +43,17 @@ router.post(
 );
 router.put("/:id", adminODirectivo, bitacoraActualizar, actualizarEstudiante);
 router.delete("/:id", adminODirectivo, bitacoraEliminar, eliminarEstudiante);
+const { soloDocente } = require("../../middlewares/authMiddleware");
 router.get(
   "/grupo/:grupoId",
-  adminODirectivo,
+  (req, res, next) => {
+    // Permitir acceso a ADMINISTRATIVO, DIRECTIVO o DOCENTE
+    const rol = req.usuario?.rol?.toUpperCase();
+    if (["ADMINISTRATIVO", "DIRECTIVO", "DOCENTE"].includes(rol)) {
+      return next();
+    }
+    return res.status(403).json({ error: "No tienes permisos suficientes para ver este grupo." });
+  },
   bitacoraConsultar,
   getEstudiantesPorGrupo,
 );
