@@ -11,6 +11,7 @@ const {
   consultarEstatusCompletoEstudiante,
   loginPadrePorToken,
 } = require("../../controller/movil/estatusEstudianteController");
+const { loginPadre } = require("../../controller/web/padresController");
 
 router.post("/login-token", loginPadrePorToken);
 
@@ -19,4 +20,7 @@ router.get(
   consultarEstatusCompletoEstudiante,
 );
 
+router.post("/login", loginPadre);
+
+module.exports = router;
 module.exports = router;
