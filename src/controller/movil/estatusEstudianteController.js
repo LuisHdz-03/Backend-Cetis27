@@ -134,47 +134,8 @@ const consultarEstatusCompletoEstudiante = async (req, res) => {
   }
 };
 
-// Login de padres/tutores por tokenPadre
-const loginPadrePorToken = async (req, res) => {
-  const { tokenPadre } = req.body;
-  if (!tokenPadre || typeof tokenPadre !== "string" || tokenPadre.length !== 10) {
-    return res.status(400).json({ error: "Token inválido" });
-  }
-  try {
-    const estudiante = await prisma.estudiante.findUnique({
-      where: { tokenPadre },
-      include: {
-        usuario: {
-          select: {
-            nombre: true,
-            apellidoPaterno: true,
-            apellidoMaterno: true,
-            curp: true,
-          },
-        },
-      },
-    });
-    if (!estudiante) {
-      return res.status(404).json({ error: "Token no válido o estudiante no encontrado" });
-    }
-    res.json({
-      ok: true,
-      estudiante: {
-        idEstudiante: estudiante.idEstudiante,
-        nombreCompleto: `${estudiante.usuario.nombre} ${estudiante.usuario.apellidoPaterno} ${estudiante.usuario.apellidoMaterno}`.trim(),
-        curp: estudiante.usuario.curp,
-        tokenPadre: estudiante.tokenPadre,
-      },
-      mensaje: "Inicio de sesión exitoso. Usa el idEstudiante para consultar el historial.",
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Error en el servidor" });
-  }
-};
 
 module.exports = {
   consultarEstatusEstudiante,
-  consultarEstatusCompletoEstudiante,
-  loginPadrePorToken,
+  consultarEstatusCompletoEstudiante
 };

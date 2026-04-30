@@ -8,12 +8,10 @@ const {
   loginPadrePorAlumno,
 } = require("../../controller/movil/estudianteMoController");
 const {
-  consultarEstatusCompletoEstudiante,
-  loginPadrePorToken,
+  consultarEstatusCompletoEstudiante
 } = require("../../controller/movil/estatusEstudianteController");
 const { loginPadre } = require("../../controller/web/padresController");
 
-router.post("/login-token", loginPadrePorToken);
 
 router.get(
   "/estatus-completo/:idEstudiante",
