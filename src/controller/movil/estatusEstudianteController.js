@@ -136,6 +136,7 @@ const consultarEstatusCompletoEstudiante = async (req, res) => {
       docente: r.docente
         ? `${r.docente.usuario.nombre} ${r.docente.usuario.apellidoPaterno}`
         : "Administración",
+      reportadoPor: r.reportadoPor || null,
     }));
     res.json({
       ok: true,
@@ -146,12 +147,13 @@ const consultarEstatusCompletoEstudiante = async (req, res) => {
     });
   } catch (error) {
     console.error("Error al consultar estatus completo del estudiante:", error);
-    res.status(500).json({ error: "Error al consultar estatus completo del estudiante" });
+    res
+      .status(500)
+      .json({ error: "Error al consultar estatus completo del estudiante" });
   }
 };
 
-
 module.exports = {
   consultarEstatusEstudiante,
-  consultarEstatusCompletoEstudiante
+  consultarEstatusCompletoEstudiante,
 };

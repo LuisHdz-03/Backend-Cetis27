@@ -36,27 +36,32 @@ router.post(
 );
 router.put(
   "/cambiar-password",
+  verificarToken,
   bitacoraActualizar,
   cambiarPassword,
 );
 router.put(
   "/cambiar-password-obligatorio",
+  verificarToken,
   bitacoraActualizar,
   cambiarPasswordObligatorio,
 );
 router.get("/mi-perfil", verificarToken, bitacoraConsultar, getMiPerfil);
 router.get(
   "/perfil-editable",
+  verificarToken,
   bitacoraConsultar,
   getDatosPerfilEditable,
 );
 router.put(
   "/registrar-correo",
+  verificarToken,
   bitacoraActualizar,
   registrarCorreo,
 );
 router.put(
   "/completar-perfil",
+  verificarToken,
   bitacoraActualizar,
   completarPerfil,
 );
