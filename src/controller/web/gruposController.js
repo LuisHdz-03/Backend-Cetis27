@@ -1,6 +1,15 @@
 const prisma = require("../../config/prisma");
 const XLSX = require("xlsx");
 
+const getExcelValue = (row, aliases = []) => {
+  for (const alias of aliases) {
+    if (Object.prototype.hasOwnProperty.call(row, alias)) {
+      return row[alias];
+    }
+  }
+  return undefined;
+};
+
 const validarAulaEnCatalogo = async (aula) => {
   if (!aula) return true;
 
@@ -19,17 +28,8 @@ const validarAulaEnCatalogo = async (aula) => {
 
 const crearGrupo = async (req, res) => {
   try {
-    const {
-      nombre,
-      grado,
-      turno,
-      aula,
-      periodoId,
-      especialidadId,
-      docenteId,
-      docenteTutorId,
-      materiasIds,
-    } = req.body;
+    const { nombre, grado, turno, aula, especialidadId, docenteTutorId } =
+      req.body;
 
     // Validaciones
     if (!especialidadId) {
@@ -52,58 +52,35 @@ const crearGrupo = async (req, res) => {
       }
     }
 
-    const nuevoGrupo = await prisma.$transaction(async (tx) => {
-      const grupoCreado = await tx.grupo.create({
-        data: {
-          nombre,
-          grado: parseInt(grado),
-          turno,
-          aula,
-          especialidadId: parseInt(especialidadId),
-          docenteTutorId: parseInt(docenteTutorId),
-        },
-        include: {
-          docenteTutor: {
-            include: {
-              usuario: {
-                select: {
-                  nombre: true,
-                  apellidoPaterno: true,
-                  apellidoMaterno: true,
-                },
+    const nuevoGrupo = await prisma.grupo.create({
+      data: {
+        nombre,
+        grado: parseInt(grado),
+        turno,
+        aula,
+        especialidadId: parseInt(especialidadId),
+        docenteTutorId: parseInt(docenteTutorId),
+      },
+      include: {
+        docenteTutor: {
+          include: {
+            usuario: {
+              select: {
+                nombre: true,
+                apellidoPaterno: true,
+                apellidoMaterno: true,
               },
             },
           },
         },
-      });
-
-      if (
-        docenteId &&
-        materiasIds &&
-        Array.isArray(materiasIds) &&
-        materiasIds.length > 0 &&
-        periodoId
-      ) {
-        const clasesData = materiasIds.map((materiaId) => ({
-          grupoId: grupoCreado.idGrupo,
-          docenteId: parseInt(docenteId),
-          materiaId: parseInt(materiaId),
-          periodoId: parseInt(periodoId),
-        }));
-
-        await tx.clase.createMany({
-          data: clasesData,
-        });
-      }
-
-      return grupoCreado;
+      },
     });
 
     res
       .status(201)
       .json({ mensaje: "Grupo creado exitosamente", grupo: nuevoGrupo });
   } catch (error) {
-    console.error("Error al crear grupo con materias:", error);
+    console.error("Error al crear grupo:", error);
     res.status(500).json({ error: "Error al crear grupo" });
   }
 };
@@ -133,7 +110,18 @@ const getGrupos = async (req, res) => {
         clases: {
           where: { periodo: { activo: true } },
           include: {
-            materias: true,
+            materias: {
+              include: {
+                espacio: {
+                  select: {
+                    idEspacio: true,
+                    nombre: true,
+                    tipo: true,
+                    activo: true,
+                  },
+                },
+              },
+            },
             docente: {
               include: {
                 usuario: { select: { nombre: true, apellidoPaterno: true } },
@@ -193,7 +181,18 @@ const getGrupoById = async (req, res) => {
         clases: {
           where: { periodo: { activo: true } },
           include: {
-            materias: true,
+            materias: {
+              include: {
+                espacio: {
+                  select: {
+                    idEspacio: true,
+                    nombre: true,
+                    tipo: true,
+                    activo: true,
+                  },
+                },
+              },
+            },
             periodo: true,
             docente: {
               include: {
@@ -214,17 +213,8 @@ const getGrupoById = async (req, res) => {
 const actualizarGrupo = async (req, res) => {
   try {
     const { id } = req.params;
-    const {
-      nombre,
-      grado,
-      turno,
-      aula,
-      especialidadId,
-      periodoId,
-      docenteId,
-      docenteTutorId,
-      materiasIds,
-    } = req.body;
+    const { nombre, grado, turno, aula, especialidadId, docenteTutorId } =
+      req.body;
 
     const grupoId = parseInt(id, 10);
     if (isNaN(grupoId)) {
@@ -245,50 +235,11 @@ const actualizarGrupo = async (req, res) => {
       }
     }
 
-    let parsedDocenteId = null;
-    if (docenteId !== undefined && docenteId !== null) {
-      parsedDocenteId = parseInt(docenteId, 10);
-      if (isNaN(parsedDocenteId))
-        return res.status(400).json({ error: "docenteId inválido" });
-    }
-
-    let parsedPeriodoId = null;
-    if (periodoId !== undefined && periodoId !== null) {
-      parsedPeriodoId = parseInt(periodoId, 10);
-      if (isNaN(parsedPeriodoId))
-        return res.status(400).json({ error: "periodoId inválido" });
-    }
-
     let parsedDocenteTutorId = null;
     if (docenteTutorId !== undefined && docenteTutorId !== null) {
       parsedDocenteTutorId = parseInt(docenteTutorId, 10);
       if (isNaN(parsedDocenteTutorId))
         return res.status(400).json({ error: "docenteTutorId inválido" });
-    }
-
-    let parsedMateriasIds = [];
-    if (materiasIds !== undefined) {
-      if (!Array.isArray(materiasIds)) {
-        return res
-          .status(400)
-          .json({ error: "materiasIds debe ser un arreglo" });
-      }
-      parsedMateriasIds = materiasIds.map((m) => parseInt(m, 10));
-      if (parsedMateriasIds.some(isNaN)) {
-        return res
-          .status(400)
-          .json({ error: "Uno o más IDs en materiasIds no son válidos" });
-      }
-
-      if (
-        parsedMateriasIds.length > 0 &&
-        (!parsedDocenteId || !parsedPeriodoId)
-      ) {
-        return res.status(400).json({
-          error:
-            "Para asignar materias, debes enviar un docenteId y periodoId válidos.",
-        });
-      }
     }
 
     const grupoExiste = await prisma.grupo.findUnique({
@@ -339,49 +290,26 @@ const actualizarGrupo = async (req, res) => {
     if (parsedDocenteTutorId !== null)
       dataActualizar.docenteTutorId = parsedDocenteTutorId;
 
-    const grupoActualizado = await prisma.$transaction(async (tx) => {
-      const grupo = await tx.grupo.update({
-        where: { idGrupo: grupoId },
-        data: dataActualizar,
-        include: {
-          docenteTutor: {
-            include: {
-              usuario: {
-                select: {
-                  nombre: true,
-                  apellidoPaterno: true,
-                  apellidoMaterno: true,
-                  username: true,
-                },
+    const grupoActualizado = await prisma.grupo.update({
+      where: { idGrupo: grupoId },
+      data: dataActualizar,
+      include: {
+        docenteTutor: {
+          include: {
+            usuario: {
+              select: {
+                nombre: true,
+                apellidoPaterno: true,
+                apellidoMaterno: true,
+                username: true,
               },
             },
           },
-          especialidad: {
-            select: { nombre: true, codigo: true },
-          },
         },
-      });
-
-      if (materiasIds !== undefined && Array.isArray(materiasIds)) {
-        await tx.clase.deleteMany({
-          where: {
-            grupoId: grupoId,
-            periodoId: parseInt(periodoId, 10),
-          },
-        });
-
-        if (parsedMateriasIds.length > 0) {
-          const clasesData = parsedMateriasIds.map((materiaId) => ({
-            grupoId,
-            docenteId: parsedDocenteId,
-            materiaId: materiaId,
-            periodoId: parsedPeriodoId,
-          }));
-          await tx.clase.createMany({ data: clasesData });
-        }
-      }
-
-      return grupo;
+        especialidad: {
+          select: { nombre: true, codigo: true },
+        },
+      },
     });
 
     return res.json({
@@ -432,12 +360,20 @@ const cargarGruposMasivos = async (req, res) => {
     const turnosValidos = ["MATUTINO", "VESPERTINO", "MIXTO"];
 
     for (const fila of datosExcel) {
-      const nombre = fila["NOMBRE"];
-      const grado = fila["GRADO"];
-      const turno = fila["TURNO"];
-      const aula = fila["AULA"];
-      const especialidadNombre = fila["ESPECIALIDAD"];
-      const docenteTutorNumEmpleado = fila["DOCENTE_TUTOR_NUM_EMPLEADO"];
+      const nombre = getExcelValue(fila, ["NOMBRE", "GRUPO"]);
+      const grado = getExcelValue(fila, ["GRADO", "SEMESTRE"]);
+      const turno = getExcelValue(fila, ["TURNO"]);
+      const aula = getExcelValue(fila, ["AULA", "ESPACIO"]);
+      const especialidadNombre = getExcelValue(fila, [
+        "ESPECIALIDAD",
+        "CARRERA",
+      ]);
+      const docenteTutorNumEmpleado = getExcelValue(fila, [
+        "DOCENTE TUTOR",
+        "DOCENTE_TUTOR_NUM_EMPLEADO",
+        "DOCENTE_TUTOR",
+        "DOCENTE_TUTOR_NUMERO_EMPLEADO",
+      ]);
 
       if (!nombre || !grado || !turno || !especialidadNombre) {
         errores.push({
@@ -450,7 +386,7 @@ const cargarGruposMasivos = async (req, res) => {
       if (!docenteTutorNumEmpleado) {
         errores.push({
           registro: nombre || "Desconocido",
-          error: "Falta la columna DOCENTE_TUTOR_NUM_EMPLEADO (obligatoria)",
+          error: "Falta la columna DOCENTE TUTOR (obligatoria)",
         });
         continue;
       }
@@ -580,7 +516,7 @@ const descargarPlantillaGrupos = async (req, res) => {
         TURNO: "MATUTINO",
         AULA: "A-101",
         ESPECIALIDAD: "PROGRAMACION",
-        DOCENTE_TUTOR_NUM_EMPLEADO: "DOC001",
+        "DOCENTE TUTOR": "DOC001",
       },
     ];
 
@@ -604,7 +540,7 @@ const descargarPlantillaGrupos = async (req, res) => {
         DESCRIPCION: "Nombre de la especialidad (obligatorio)",
       },
       {
-        CAMPO: "DOCENTE_TUTOR_NUM_EMPLEADO",
+        CAMPO: "DOCENTE TUTOR",
         DESCRIPCION:
           "Numero de empleado del docente tutor (obligatorio, sin ID)",
       },

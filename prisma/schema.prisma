@@ -133,11 +133,13 @@ model Materia {
   horasSemana    Int?
   semestre       Int?
   especialidadId Int?
+  espacioId      Int?
   creditos       Int?
   horasPractica  Int?
   horasTeoria    Int?
   clases         Clase[]
   especialidad   Especialidad? @relation(fields: [especialidadId], references: [idEspecialidad])
+  espacio        Espacio?      @relation(fields: [espacioId], references: [idEspacio])
 
   @@map("materias")
 }
@@ -228,6 +230,7 @@ model Espacio {
   descripcion String?
   activo      Boolean     @default(true)
   creadoEn    DateTime    @default(now())
+  materias    Materia[]
 
   @@map("espacios")
 }

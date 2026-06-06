@@ -424,6 +424,11 @@ const actualizartutor = async (req, res) => {
 
 // Genera firma digital JWT para la credencial
 const generarFirmaCredencial = (datosCredencial) => {
+  const firmante = datosCredencial.firmante || {
+    nombre: datosCredencial.director || null,
+    cargo: "DIRECCION DEL PLANTEL",
+  };
+
   const payload = {
     tipo: "CREDENCIAL_DIGITAL",
     matricula: datosCredencial.noControl,
@@ -441,8 +446,7 @@ const generarFirmaCredencial = (datosCredencial) => {
           .digest("hex")
           .substring(0, 16)
       : null,
-    firmadoPor:
-      datosCredencial.firmante.nombre || datosCredencial.firmante.cargo,
+    firmadoPor: firmante.nombre || firmante.cargo,
     timestamp: new Date().toISOString(),
   };
 
@@ -518,9 +522,9 @@ const getCredencial = async (req, res) => {
       fotoUrl: estudiante.fotoUrl || null,
       qrPayload,
       qrBase64,
-      director: firmante.nombre || null, // Solo nombre del director
-      // firmante,
-      // imagenFirmaDirector: firmante.firmaImagenUrl || null,
+      director: firmante.nombre || null,
+      firmante,
+      imagenFirmaDirector: firmante.firmaImagenUrl || null,
     };
 
     // Generar firma digital de la credencial
@@ -528,10 +532,11 @@ const getCredencial = async (req, res) => {
     respuesta.firmaDigital = firmaDigital;
 
     // Imprimimos en la terminal del backend para verificar que sí manda los datos
-    console.log("Datos enviados a la app (solo nombre director):", {
+    console.log("Datos enviados a la app (credencial con director y firma):", {
       curp: respuesta.curp,
       grupo: respuesta.grupo,
       director: respuesta.director,
+      imagenFirmaDirector: respuesta.imagenFirmaDirector,
       firmaHashCortada: firmaDigital.substring(0, 20) + "...",
     });
 

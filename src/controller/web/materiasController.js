@@ -1,9 +1,123 @@
 const prisma = require("../../config/prisma");
 const XLSX = require("xlsx");
 
+const getExcelValue = (row, aliases = []) => {
+  for (const alias of aliases) {
+    if (Object.prototype.hasOwnProperty.call(row, alias)) {
+      return row[alias];
+    }
+  }
+  return undefined;
+};
+
+const parseNullableInt = (value, fieldName) => {
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+
+  const parsedValue = parseInt(value, 10);
+  if (isNaN(parsedValue)) {
+    return { error: `El campo ${fieldName} debe ser un número válido` };
+  }
+
+  return parsedValue;
+};
+
+const includeMateriaDetalle = {
+  especialidad: {
+    select: { nombre: true },
+  },
+  espacio: {
+    select: {
+      idEspacio: true,
+      nombre: true,
+      tipo: true,
+      activo: true,
+    },
+  },
+};
+
+const resolverEspecialidadId = async (especialidadId) => {
+  if (especialidadId === undefined) return undefined;
+  if (especialidadId === null || especialidadId === "") return null;
+
+  const parsedEspecialidadId = parseInt(especialidadId, 10);
+  if (isNaN(parsedEspecialidadId)) {
+    return { error: "El especialidadId es inválido" };
+  }
+
+  const especialidadExiste = await prisma.especialidad.findUnique({
+    where: { idEspecialidad: parsedEspecialidadId },
+    select: { idEspecialidad: true },
+  });
+
+  if (!especialidadExiste) {
+    return {
+      error: `La especialidad con ID ${especialidadId} no existe`,
+    };
+  }
+
+  return parsedEspecialidadId;
+};
+
+const resolverEspacioId = async (espacioId) => {
+  if (espacioId === undefined) return undefined;
+  if (espacioId === null || espacioId === "") return null;
+
+  const parsedEspacioId = parseInt(espacioId, 10);
+  if (isNaN(parsedEspacioId)) {
+    return { error: "El espacioId es inválido" };
+  }
+
+  const espacioExiste = await prisma.espacio.findFirst({
+    where: { idEspacio: parsedEspacioId, activo: true },
+    select: { idEspacio: true },
+  });
+
+  if (!espacioExiste) {
+    return {
+      error: `El espacio con ID ${espacioId} no existe o está inactivo`,
+    };
+  }
+
+  return parsedEspacioId;
+};
+
+const resolverEspacioIdPorNombre = async (espacioNombre) => {
+  if (!espacioNombre) return null;
+
+  const espacioExiste = await prisma.espacio.findFirst({
+    where: {
+      nombre: {
+        equals: String(espacioNombre).trim(),
+        mode: "insensitive",
+      },
+      activo: true,
+    },
+    select: { idEspacio: true },
+  });
+
+  if (!espacioExiste) {
+    return {
+      error: `El espacio \"${espacioNombre}\" no existe o está inactivo`,
+    };
+  }
+
+  return espacioExiste.idEspacio;
+};
+
 const crearMateria = async (req, res) => {
   try {
-    const { nombre, codigo, horasSemana, semestre, especialidadId } = req.body;
+    const {
+      nombre,
+      codigo,
+      horasSemana,
+      semestre,
+      especialidadId,
+      espacioId,
+      creditos,
+      horasPractica,
+      horasTeoria,
+    } = req.body;
 
     const existe = await prisma.materia.findFirst({
       where: { codigo: codigo },
@@ -13,14 +127,57 @@ const crearMateria = async (req, res) => {
       return res.status(400).json({ error: "La materia ya existe" });
     }
 
+    const especialidadResuelta = await resolverEspecialidadId(especialidadId);
+    if (especialidadResuelta?.error) {
+      return res.status(400).json({ error: especialidadResuelta.error });
+    }
+
+    const espacioResuelto = await resolverEspacioId(espacioId);
+    if (espacioResuelto?.error) {
+      return res.status(400).json({ error: espacioResuelto.error });
+    }
+
+    const horasSemanaResueltas = parseNullableInt(horasSemana, "horasSemana");
+    if (horasSemanaResueltas?.error) {
+      return res.status(400).json({ error: horasSemanaResueltas.error });
+    }
+
+    const semestreResuelto = parseNullableInt(semestre, "semestre");
+    if (semestreResuelto?.error) {
+      return res.status(400).json({ error: semestreResuelto.error });
+    }
+
+    const creditosResueltos = parseNullableInt(creditos, "creditos");
+    if (creditosResueltos?.error) {
+      return res.status(400).json({ error: creditosResueltos.error });
+    }
+
+    const horasPracticaResueltas = parseNullableInt(
+      horasPractica,
+      "horasPractica",
+    );
+    if (horasPracticaResueltas?.error) {
+      return res.status(400).json({ error: horasPracticaResueltas.error });
+    }
+
+    const horasTeoriaResueltas = parseNullableInt(horasTeoria, "horasTeoria");
+    if (horasTeoriaResueltas?.error) {
+      return res.status(400).json({ error: horasTeoriaResueltas.error });
+    }
+
     const nuevaMateria = await prisma.materia.create({
       data: {
         nombre,
         codigo,
-        horasSemana: parseInt(horasSemana),
-        semestre: parseInt(semestre),
-        especialidadId: especialidadId ? parseInt(especialidadId) : null,
+        horasSemana: horasSemanaResueltas ?? null,
+        semestre: semestreResuelto ?? null,
+        especialidadId: especialidadResuelta ?? null,
+        espacioId: espacioResuelto ?? null,
+        creditos: creditosResueltos ?? null,
+        horasPractica: horasPracticaResueltas ?? null,
+        horasTeoria: horasTeoriaResueltas ?? null,
       },
+      include: includeMateriaDetalle,
     });
 
     res
@@ -35,11 +192,7 @@ const crearMateria = async (req, res) => {
 const getMateria = async (req, res) => {
   try {
     const materias = await prisma.materia.findMany({
-      include: {
-        especialidad: {
-          select: { nombre: true },
-        },
-      },
+      include: includeMateriaDetalle,
     });
     res.json(materias);
   } catch (error) {
@@ -50,7 +203,17 @@ const getMateria = async (req, res) => {
 const actualizarMateria = async (req, res) => {
   try {
     const { id } = req.params;
-    const { nombre, codigo, horasSemana, semestre, especialidadId } = req.body;
+    const {
+      nombre,
+      codigo,
+      horasSemana,
+      semestre,
+      especialidadId,
+      espacioId,
+      creditos,
+      horasPractica,
+      horasTeoria,
+    } = req.body;
 
     const materiaId = parseInt(id);
 
@@ -67,17 +230,42 @@ const actualizarMateria = async (req, res) => {
       return res.status(404).json({ error: "Materia no encontrada" });
     }
 
-    // Validar especialidad si se proporciona
-    if (especialidadId !== undefined && especialidadId !== null) {
-      const especialidadExiste = await prisma.especialidad.findUnique({
-        where: { idEspecialidad: parseInt(especialidadId) },
-      });
+    const especialidadResuelta = await resolverEspecialidadId(especialidadId);
+    if (especialidadResuelta?.error) {
+      return res.status(400).json({ error: especialidadResuelta.error });
+    }
 
-      if (!especialidadExiste) {
-        return res.status(400).json({
-          error: `La especialidad con ID ${especialidadId} no existe`,
-        });
-      }
+    const espacioResuelto = await resolverEspacioId(espacioId);
+    if (espacioResuelto?.error) {
+      return res.status(400).json({ error: espacioResuelto.error });
+    }
+
+    const horasSemanaResueltas = parseNullableInt(horasSemana, "horasSemana");
+    if (horasSemanaResueltas?.error) {
+      return res.status(400).json({ error: horasSemanaResueltas.error });
+    }
+
+    const semestreResuelto = parseNullableInt(semestre, "semestre");
+    if (semestreResuelto?.error) {
+      return res.status(400).json({ error: semestreResuelto.error });
+    }
+
+    const creditosResueltos = parseNullableInt(creditos, "creditos");
+    if (creditosResueltos?.error) {
+      return res.status(400).json({ error: creditosResueltos.error });
+    }
+
+    const horasPracticaResueltas = parseNullableInt(
+      horasPractica,
+      "horasPractica",
+    );
+    if (horasPracticaResueltas?.error) {
+      return res.status(400).json({ error: horasPracticaResueltas.error });
+    }
+
+    const horasTeoriaResueltas = parseNullableInt(horasTeoria, "horasTeoria");
+    if (horasTeoriaResueltas?.error) {
+      return res.status(400).json({ error: horasTeoriaResueltas.error });
     }
 
     // Actualizar materia
@@ -86,16 +274,24 @@ const actualizarMateria = async (req, res) => {
     if (codigo !== undefined)
       dataActualizar.codigo = codigo ? codigo.trim().toUpperCase() : null;
     if (horasSemana !== undefined)
-      dataActualizar.horasSemana = horasSemana ? parseInt(horasSemana) : null;
+      dataActualizar.horasSemana = horasSemanaResueltas;
     if (semestre !== undefined)
-      dataActualizar.semestre = semestre ? parseInt(semestre) : null;
+      dataActualizar.semestre = semestreResuelto;
     if (especialidadId !== undefined)
-      dataActualizar.especialidadId =
-        especialidadId !== null ? parseInt(especialidadId) : null;
+      dataActualizar.especialidadId = especialidadResuelta;
+    if (espacioId !== undefined)
+      dataActualizar.espacioId = espacioResuelto;
+    if (creditos !== undefined)
+      dataActualizar.creditos = creditosResueltos;
+    if (horasPractica !== undefined)
+      dataActualizar.horasPractica = horasPracticaResueltas;
+    if (horasTeoria !== undefined)
+      dataActualizar.horasTeoria = horasTeoriaResueltas;
 
     const materiaActualizada = await prisma.materia.update({
       where: { idMateria: materiaId },
       data: dataActualizar,
+      include: includeMateriaDetalle,
     });
 
     res.json({
@@ -149,11 +345,30 @@ const cargarMateriasMasivas = async (req, res) => {
     const datosInsertados = [];
 
     for (const fila of datosExcel) {
-      const nombre = fila["NOMBRE"];
-      const codigo = fila["CODIGO"];
-      const horasSemana = fila["HORAS_SEMANA"];
-      const semestre = fila["SEMESTRE"];
-      const especialidadNombre = fila["ESPECIALIDAD"];
+      const nombre = getExcelValue(fila, ["NOMBRE", "MATERIA"]);
+      const codigo = getExcelValue(fila, ["CODIGO", "CÓDIGO"]);
+      const horasSemana = getExcelValue(fila, [
+        "HORAS_SEMANA",
+        "HORAS SEMANA",
+        "HORAS_SEMANALES",
+      ]);
+      const semestre = getExcelValue(fila, ["SEMESTRE"]);
+      const especialidadNombre = getExcelValue(fila, [
+        "ESPECIALIDAD",
+        "CARRERA",
+      ]);
+      const espacioNombre = getExcelValue(fila, ["ESPACIO", "AULA"]);
+      const creditos = getExcelValue(fila, ["CREDITOS", "CRÉDITOS"]);
+      const horasPractica = getExcelValue(fila, [
+        "HORAS_PRACTICA",
+        "HORAS PRACTICA",
+        "HORAS_PRÁCTICA",
+      ]);
+      const horasTeoria = getExcelValue(fila, [
+        "HORAS_TEORIA",
+        "HORAS TEORIA",
+        "HORAS_TEÓRIA",
+      ]);
 
       // Validar campo obligatorio
       if (!nombre) {
@@ -187,6 +402,55 @@ const cargarMateriasMasivas = async (req, res) => {
           especialidadId = especialidadExiste.idEspecialidad;
         }
 
+        let espacioId = null;
+        if (espacioNombre) {
+          const espacioResuelto = await resolverEspacioIdPorNombre(espacioNombre);
+          if (espacioResuelto?.error) {
+            errores.push({
+              registro: nombre,
+              error: espacioResuelto.error,
+            });
+            continue;
+          }
+          espacioId = espacioResuelto;
+        }
+
+        const horasInt = parseNullableInt(horasSemana, "HORAS_SEMANA");
+        if (horasInt?.error) {
+          errores.push({ registro: nombre, error: horasInt.error });
+          continue;
+        }
+
+        const semestreInt = parseNullableInt(semestre, "SEMESTRE");
+        if (semestreInt?.error) {
+          errores.push({ registro: nombre, error: semestreInt.error });
+          continue;
+        }
+
+        const creditosInt = parseNullableInt(creditos, "CREDITOS");
+        if (creditosInt?.error) {
+          errores.push({ registro: nombre, error: creditosInt.error });
+          continue;
+        }
+
+        const horasPracticaInt = parseNullableInt(
+          horasPractica,
+          "HORAS_PRACTICA",
+        );
+        if (horasPracticaInt?.error) {
+          errores.push({ registro: nombre, error: horasPracticaInt.error });
+          continue;
+        }
+
+        const horasTeoriaInt = parseNullableInt(
+          horasTeoria,
+          "HORAS_TEORIA",
+        );
+        if (horasTeoriaInt?.error) {
+          errores.push({ registro: nombre, error: horasTeoriaInt.error });
+          continue;
+        }
+
         // Buscar si ya existe una materia con ese nombre
         const materiaExiste = await prisma.materia.findFirst({
           where: {
@@ -200,8 +464,6 @@ const cargarMateriasMasivas = async (req, res) => {
           const codigoNormalizado = codigo
             ? String(codigo).trim().toUpperCase()
             : null;
-          const horasInt = horasSemana ? parseInt(horasSemana) : null;
-          const semestreInt = semestre ? parseInt(semestre) : null;
 
           if (codigoNormalizado !== materiaExiste.codigo)
             materiaUpdate.codigo = codigoNormalizado;
@@ -211,6 +473,14 @@ const cargarMateriasMasivas = async (req, res) => {
             materiaUpdate.semestre = semestreInt;
           if (especialidadId !== materiaExiste.especialidadId)
             materiaUpdate.especialidadId = especialidadId;
+          if (espacioId !== materiaExiste.espacioId)
+            materiaUpdate.espacioId = espacioId;
+          if (creditosInt !== materiaExiste.creditos)
+            materiaUpdate.creditos = creditosInt;
+          if (horasPracticaInt !== materiaExiste.horasPractica)
+            materiaUpdate.horasPractica = horasPracticaInt;
+          if (horasTeoriaInt !== materiaExiste.horasTeoria)
+            materiaUpdate.horasTeoria = horasTeoriaInt;
 
           if (Object.keys(materiaUpdate).length > 0) {
             await prisma.materia.update({
@@ -226,8 +496,12 @@ const cargarMateriasMasivas = async (req, res) => {
               nombre: String(nombre).trim(),
               codigo: codigo ? String(codigo).trim().toUpperCase() : null,
               horasSemana: horasSemana ? parseInt(horasSemana) : null,
-              semestre: semestre ? parseInt(semestre) : null,
+              semestre: semestreInt,
               especialidadId: especialidadId,
+              espacioId: espacioId,
+              creditos: creditosInt,
+              horasPractica: horasPracticaInt,
+              horasTeoria: horasTeoriaInt,
             },
           });
           datosInsertados.push(nuevaMateria.nombre);
@@ -267,11 +541,7 @@ const getMateriasPorEspecialidad = async (req, res) => {
       where: {
         especialidadId: parseInt(especialidadId),
       },
-      include: {
-        especialidad: {
-          select: { nombre: true },
-        },
-      },
+      include: includeMateriaDetalle,
       orderBy: {
         semestre: "asc", // Ordenadas por semestre
       },
@@ -292,15 +562,33 @@ const descargarPlantillaMaterias = async (req, res) => {
       {
         NOMBRE: "PROGRAMACION WEB",
         CODIGO: "PRG401",
-        HORAS_SEMANA: 5,
+        "HORAS SEMANA": 5,
         SEMESTRE: 4,
+        CREDITOS: 8,
+        "HORAS PRACTICA": 3,
+        "HORAS TEORIA": 2,
         ESPECIALIDAD: "PROGRAMACION",
+        ESPACIO: "LABORATORIO 1",
       },
+    ];
+
+    const instrucciones = [
+      { CAMPO: "NOMBRE", DESCRIPCION: "Nombre de la materia (obligatorio)" },
+      { CAMPO: "CODIGO", DESCRIPCION: "Código de la materia (opcional, recomendable único)" },
+      { CAMPO: "HORAS SEMANA", DESCRIPCION: "Horas por semana (opcional, número entero)" },
+      { CAMPO: "SEMESTRE", DESCRIPCION: "Semestre de la materia (opcional, número entero)" },
+      { CAMPO: "CREDITOS", DESCRIPCION: "Créditos de la materia (opcional, número entero)" },
+      { CAMPO: "HORAS PRACTICA", DESCRIPCION: "Horas prácticas (opcional, número entero)" },
+      { CAMPO: "HORAS TEORIA", DESCRIPCION: "Horas teóricas (opcional, número entero)" },
+      { CAMPO: "ESPECIALIDAD", DESCRIPCION: "Nombre de la especialidad o carrera existente (opcional)" },
+      { CAMPO: "ESPACIO", DESCRIPCION: "Nombre del espacio activo existente para la materia (opcional)" },
     ];
 
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(filasEjemplo);
+    const wsInstrucciones = XLSX.utils.json_to_sheet(instrucciones);
     XLSX.utils.book_append_sheet(wb, ws, "Plantilla_Materias");
+    XLSX.utils.book_append_sheet(wb, wsInstrucciones, "Instrucciones");
 
     const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
 

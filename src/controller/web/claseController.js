@@ -21,6 +21,14 @@ const includeClaseDetalle = {
       idMateria: true,
       nombre: true,
       codigo: true,
+      espacio: {
+        select: {
+          idEspacio: true,
+          nombre: true,
+          tipo: true,
+          activo: true,
+        },
+      },
     },
   },
   docente: {
@@ -45,6 +53,141 @@ const includeClaseDetalle = {
       fechaFin: true,
     },
   },
+};
+
+const parseIdEntero = (valor) => {
+  const numero = parseInt(valor, 10);
+  return Number.isNaN(numero) ? null : numero;
+};
+
+const obtenerListaClasesEntrada = (body = {}) => {
+  let lista = body.clases ?? body.materias ?? body.materiasIds ?? body.materiaIds;
+
+  if (lista === undefined) return null;
+
+  if (typeof lista === "string") {
+    const texto = lista.trim();
+
+    if (!texto) return [];
+
+    try {
+      lista = JSON.parse(texto);
+    } catch {
+      lista = texto
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+  }
+
+  return Array.isArray(lista) ? lista : [];
+};
+
+const resolverDocenteIdClase = async (db, claseEntrada, docenteTutorId = null) => {
+  const esObjeto =
+    claseEntrada !== null &&
+    typeof claseEntrada === "object" &&
+    !Array.isArray(claseEntrada);
+
+  let docenteId = esObjeto
+    ? parseIdEntero(
+        claseEntrada.docenteId ??
+          claseEntrada.idDocente ??
+          claseEntrada.docente,
+      )
+    : null;
+
+  if (!docenteId && esObjeto) {
+    const docenteUsuarioId = parseIdEntero(
+      claseEntrada.docenteUsuarioId ??
+        claseEntrada.usuarioDocenteId ??
+        claseEntrada.idUsuarioDocente,
+    );
+
+    if (docenteUsuarioId) {
+      const docente = await db.docente.findUnique({
+        where: { usuarioId: docenteUsuarioId },
+        select: { idDocente: true },
+      });
+
+      if (!docente) {
+        const error = new Error(
+          `No se encontró docente para el usuario ${docenteUsuarioId}`,
+        );
+        error.status = 400;
+        throw error;
+      }
+
+      docenteId = docente.idDocente;
+    }
+  }
+
+  if (!docenteId) {
+    docenteId = docenteTutorId;
+  }
+
+  if (!docenteId) {
+    const error = new Error("Cada clase debe tener un docente asignado");
+    error.status = 400;
+    throw error;
+  }
+
+  return docenteId;
+};
+
+const normalizarClaseEntrada = async (db, claseEntrada, docenteTutorId = null) => {
+  const esObjeto =
+    claseEntrada !== null &&
+    typeof claseEntrada === "object" &&
+    !Array.isArray(claseEntrada);
+
+  const materiaId = esObjeto
+    ? parseIdEntero(
+        claseEntrada.materiaId ?? claseEntrada.idMateria ?? claseEntrada.id,
+      )
+    : parseIdEntero(claseEntrada);
+
+  if (!materiaId) {
+    const error = new Error("La lista contiene una materia inválida");
+    error.status = 400;
+    throw error;
+  }
+
+  const docenteId = await resolverDocenteIdClase(db, claseEntrada, docenteTutorId);
+  const horarioFueEnviado =
+    esObjeto && Object.prototype.hasOwnProperty.call(claseEntrada, "horario");
+
+  return {
+    materiaId,
+    docenteId,
+    horarioFueEnviado,
+    horario: horarioFueEnviado ? claseEntrada.horario || null : undefined,
+  };
+};
+
+const validarClaseUnica = async (
+  db,
+  { grupoId, materiaId, periodoId, excluirIdClase = null },
+) => {
+  const claseDuplicada = await db.clase.findFirst({
+    where: {
+      grupoId,
+      materiaId,
+      periodoId,
+      ...(excluirIdClase
+        ? { idClase: { not: excluirIdClase } }
+        : {}),
+    },
+    select: { idClase: true },
+  });
+
+  if (claseDuplicada) {
+    const error = new Error(
+      "La materia ya está asignada a ese grupo en el periodo indicado",
+    );
+    error.status = 400;
+    throw error;
+  }
 };
 
 const normalizarTexto = (valor) =>
@@ -199,8 +342,8 @@ const resolverMateriaPorGrupo = async ({ grupo, grado }) => {
 
 const construirBloqueHorario = (fila) => {
   const dia = String(fila["DIA"] || "").trim();
-  const horaInicio = String(fila["HORA_INICIO"] || "").trim();
-  const horaFin = String(fila["HORA_FIN"] || "").trim();
+  const horaInicio = String(fila["HORA INICIO"] || fila["HORA_INICIO"] || "").trim();
+  const horaFin = String(fila["HORA FIN"] || fila["HORA_FIN"] || "").trim();
   const espacio = String(fila["ESPACIO"] || "").trim();
 
   if (!dia || !horaInicio || !horaFin) return null;
@@ -287,6 +430,12 @@ const crearClase = async (req, res) => {
       });
     }
 
+    await validarClaseUnica(prisma, {
+      grupoId: parseInt(grupoId, 10),
+      materiaId: parseInt(materiaId, 10),
+      periodoId: parseInt(periodoId, 10),
+    });
+
     const nuevaClase = await prisma.clase.create({
       data: {
         horario: horario || null,
@@ -311,7 +460,162 @@ const crearClase = async (req, res) => {
       .json({ mensaje: "Clase creada con éxito", clase: nuevaClase });
   } catch (error) {
     console.error("Error crítico al crear la clase:", error);
+    if (error.status) {
+      return res.status(error.status).json({ error: error.message });
+    }
     res.status(500).json({ error: "Error al crear la clase" });
+  }
+};
+
+const sincronizarClasesGrupo = async (req, res) => {
+  try {
+    const grupoId = parseIdEntero(req.params.grupoId ?? req.body.grupoId);
+    const clasesEntrada = obtenerListaClasesEntrada(req.body);
+
+    if (!grupoId) {
+      return res.status(400).json({ error: "grupoId inválido" });
+    }
+
+    if (clasesEntrada === null) {
+      return res.status(400).json({
+        error: "Debes enviar la lista de clases o materias a sincronizar",
+      });
+    }
+
+    const periodo = await obtenerPeriodoObjetivo(req.body.periodoId ?? req.body.idPeriodo);
+    if (!periodo) {
+      return res.status(400).json({
+        error: "No se encontró el periodo indicado ni existe un periodo activo",
+      });
+    }
+
+    const grupo = await prisma.grupo.findUnique({
+      where: { idGrupo: grupoId },
+      select: { idGrupo: true, docenteTutorId: true },
+    });
+
+    if (!grupo) {
+      return res.status(404).json({ error: "Grupo no encontrado" });
+    }
+
+    const clasesNormalizadas = [];
+    for (const claseEntrada of clasesEntrada) {
+      clasesNormalizadas.push(
+        await normalizarClaseEntrada(prisma, claseEntrada, grupo.docenteTutorId),
+      );
+    }
+
+    const clasesUnicas = new Map();
+    for (const clase of clasesNormalizadas) {
+      clasesUnicas.set(clase.materiaId, clase);
+    }
+
+    const materiasIds = [...clasesUnicas.keys()];
+    if (materiasIds.length > 0) {
+      const materiasExistentes = await prisma.materia.findMany({
+        where: { idMateria: { in: materiasIds } },
+        select: { idMateria: true },
+      });
+
+      const materiasRegistradas = new Set(
+        materiasExistentes.map((materia) => materia.idMateria),
+      );
+
+      const faltantes = materiasIds.filter(
+        (materiaId) => !materiasRegistradas.has(materiaId),
+      );
+
+      if (faltantes.length > 0) {
+        return res.status(400).json({
+          error: `No existen las materias: ${faltantes.join(", ")}`,
+        });
+      }
+    }
+
+    await prisma.$transaction(async (tx) => {
+      const clasesExistentes = await tx.clase.findMany({
+        where: { grupoId, periodoId: periodo.idPeriodo },
+        select: { idClase: true, materiaId: true, docenteId: true, horario: true },
+      });
+
+      const clasesPorMateria = new Map();
+      for (const clase of clasesExistentes) {
+        clasesPorMateria.set(clase.materiaId, clase);
+      }
+
+      for (const clase of clasesUnicas.values()) {
+        const claseExistente = clasesPorMateria.get(clase.materiaId);
+
+        if (claseExistente) {
+          const dataActualizar = {};
+
+          if (claseExistente.docenteId !== clase.docenteId) {
+            dataActualizar.docenteId = clase.docenteId;
+          }
+
+          if (clase.horarioFueEnviado) {
+            dataActualizar.horario = clase.horario;
+          }
+
+          if (Object.keys(dataActualizar).length > 0) {
+            await tx.clase.update({
+              where: { idClase: claseExistente.idClase },
+              data: dataActualizar,
+            });
+          }
+          continue;
+        }
+
+        await validarClaseUnica(tx, {
+          grupoId,
+          materiaId: clase.materiaId,
+          periodoId: periodo.idPeriodo,
+        });
+
+        await tx.clase.create({
+          data: {
+            grupoId,
+            materiaId: clase.materiaId,
+            docenteId: clase.docenteId,
+            periodoId: periodo.idPeriodo,
+            horario: clase.horarioFueEnviado ? clase.horario : null,
+          },
+        });
+      }
+
+      for (const claseExistente of clasesExistentes) {
+        if (!clasesUnicas.has(claseExistente.materiaId)) {
+          await tx.clase.delete({
+            where: { idClase: claseExistente.idClase },
+          });
+        }
+      }
+    });
+
+    const clasesActualizadas = await prisma.clase.findMany({
+      where: { grupoId, periodoId: periodo.idPeriodo },
+      include: includeClaseDetalle,
+      orderBy: [{ materias: { nombre: "asc" } }],
+    });
+
+    return res.json({
+      mensaje: "Clases del grupo sincronizadas correctamente",
+      grupoId,
+      periodoId: periodo.idPeriodo,
+      clases: clasesActualizadas,
+    });
+  } catch (error) {
+    console.error("Error al sincronizar clases del grupo:", error);
+    if (error.status) {
+      return res.status(error.status).json({ error: error.message });
+    }
+    if (error.code === "P2003") {
+      return res.status(400).json({
+        error:
+          "No se pudieron eliminar algunas clases del grupo porque ya tienen registros relacionados.",
+      });
+    }
+    return res.status(500).json({ error: "Error al sincronizar clases del grupo" });
   }
 };
 
@@ -414,6 +718,7 @@ const actualizarClase = async (req, res) => {
   try {
     const { id } = req.params;
     const { grupoId, materiaId, docenteId, periodoId, horario } = req.body;
+    const docenteUsuarioId = req.body.docenteUsuarioId ?? req.body.usuarioDocenteId;
 
     // Verificar que la clase existe
     const claseExistente = await prisma.clase.findUnique({
@@ -423,6 +728,38 @@ const actualizarClase = async (req, res) => {
     if (!claseExistente) {
       return res.status(404).json({ error: "Clase no encontrada" });
     }
+
+    let docenteIdFinal = docenteId !== undefined ? parseInt(docenteId, 10) : claseExistente.docenteId;
+
+    if ((Number.isNaN(docenteIdFinal) || !docenteIdFinal) && docenteUsuarioId !== undefined) {
+      const docente = await prisma.docente.findUnique({
+        where: { usuarioId: parseInt(docenteUsuarioId, 10) },
+        select: { idDocente: true },
+      });
+
+      if (!docente) {
+        return res.status(404).json({
+          error: "No se encontró docente para el usuario proporcionado",
+        });
+      }
+
+      docenteIdFinal = docente.idDocente;
+    }
+
+    if (!docenteIdFinal || Number.isNaN(docenteIdFinal)) {
+      return res.status(400).json({ error: "docenteId inválido" });
+    }
+
+    const grupoIdFinal = grupoId !== undefined ? parseInt(grupoId, 10) : claseExistente.grupoId;
+    const materiaIdFinal = materiaId !== undefined ? parseInt(materiaId, 10) : claseExistente.materiaId;
+    const periodoIdFinal = periodoId !== undefined ? parseInt(periodoId, 10) : claseExistente.periodoId;
+
+    await validarClaseUnica(prisma, {
+      grupoId: grupoIdFinal,
+      materiaId: materiaIdFinal,
+      periodoId: periodoIdFinal,
+      excluirIdClase: parseInt(id, 10),
+    });
 
     // Construir objeto de datos a actualizar
     const dataActualizar = {};
@@ -434,7 +771,10 @@ const actualizarClase = async (req, res) => {
       dataActualizar.materiaId = parseInt(materiaId);
     }
     if (docenteId !== undefined) {
-      dataActualizar.docenteId = parseInt(docenteId);
+      dataActualizar.docenteId = docenteIdFinal;
+    }
+    if (docenteUsuarioId !== undefined) {
+      dataActualizar.docenteId = docenteIdFinal;
     }
     if (periodoId !== undefined) {
       dataActualizar.periodoId = parseInt(periodoId);
@@ -464,53 +804,53 @@ const descargarPlantillaHorarios = async (req, res) => {
   try {
     const filasEjemplo = [
       {
-        GRUPO_NOMBRE: "2AM-Programacion",
+        GRUPO: "2AM-Programacion",
         GRADO: 2,
         TURNO: "MATUTINO",
         CARRERA: "PROGRAMACION",
-        DOCENTE_NOMBRE: "Juan Perez Lopez",
+        DOCENTE: "Juan Perez Lopez",
         DIA: "LUNES",
-        HORA_INICIO: "07:00",
-        HORA_FIN: "07:50",
+        "HORA INICIO": "07:00",
+        "HORA FIN": "07:50",
         ESPACIO: "LABORATORIO 1",
       },
       {
-        GRUPO_NOMBRE: "2AM-Programacion",
+        GRUPO: "2AM-Programacion",
         GRADO: 2,
         TURNO: "MATUTINO",
         CARRERA: "PROGRAMACION",
-        DOCENTE_NOMBRE: "Juan Perez Lopez",
+        DOCENTE: "Juan Perez Lopez",
         DIA: "MIERCOLES",
-        HORA_INICIO: "08:40",
-        HORA_FIN: "09:30",
+        "HORA INICIO": "08:40",
+        "HORA FIN": "09:30",
         ESPACIO: "AULA B-12",
       },
     ];
 
     const instrucciones = [
       {
-        CAMPO: "GRUPO_NOMBRE",
-        DESCRIPCION: "Mapea a grupoId (obligatorio, se resuelve por nombre)",
+        CAMPO: "GRUPO",
+        DESCRIPCION: "Nombre del grupo (obligatorio)",
       },
       {
         CAMPO: "GRADO",
-        DESCRIPCION: "Ayuda a desambiguar grupo para obtener grupoId",
+        DESCRIPCION: "Ayuda a identificar el grupo cuando hay nombres repetidos",
       },
       {
         CAMPO: "TURNO",
-        DESCRIPCION: "Ayuda a desambiguar grupo para obtener grupoId (MATUTINO/VESPERTINO/MIXTO)",
+        DESCRIPCION: "Ayuda a identificar el grupo (MATUTINO/VESPERTINO/MIXTO)",
       },
       {
         CAMPO: "CARRERA",
-        DESCRIPCION: "Nombre o código de especialidad para resolver grupoId/materiaId",
+        DESCRIPCION: "Nombre o código de la especialidad o carrera",
       },
       {
-        CAMPO: "DOCENTE_NOMBRE",
-        DESCRIPCION: "Mapea a docenteId resolviendo por nombre completo",
+        CAMPO: "DOCENTE",
+        DESCRIPCION: "Nombre completo del docente",
       },
       {
-        CAMPO: "DIA, HORA_INICIO, HORA_FIN",
-        DESCRIPCION: "Mapea al campo horario (JSON) y es obligatorio por bloque",
+        CAMPO: "DIA, HORA INICIO, HORA FIN",
+        DESCRIPCION: "Datos obligatorios de cada bloque horario",
       },
       {
         CAMPO: "ESPACIO",
@@ -577,7 +917,7 @@ const cargarHorariosMasivos = async (req, res) => {
       const grado = fila["GRADO"];
       const turno = fila["TURNO"];
       const carrera = String(fila["CARRERA"] || "").trim();
-      const nombreDocente = String(fila["DOCENTE_NOMBRE"] || fila["DOCENTE"] || "").trim();
+      const nombreDocente = String(fila["DOCENTE NOMBRE"] || fila["DOCENTE_NOMBRE"] || fila["DOCENTE"] || "").trim();
 
       const bloque = construirBloqueHorario(fila);
 
@@ -585,7 +925,7 @@ const cargarHorariosMasivos = async (req, res) => {
         errores.push({
           fila: numeroFila,
           error:
-            "Faltan datos requeridos: GRUPO_NOMBRE, DOCENTE_NOMBRE y DIA/HORA_INICIO/HORA_FIN",
+            "Faltan datos requeridos: GRUPO, DOCENTE y DIA/HORA INICIO/HORA FIN",
         });
         continue;
       }
@@ -719,6 +1059,7 @@ const cargarHorariosMasivos = async (req, res) => {
 
 module.exports = {
   crearClase,
+  sincronizarClasesGrupo,
   getClase,
   getClaseByDocente,
   actualizarClase,

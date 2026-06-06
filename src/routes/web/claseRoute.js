@@ -6,6 +6,7 @@ const upload = multer({ storage: storage });
 
 const {
   crearClase,
+  sincronizarClasesGrupo,
   getClase,
   getClaseByDocente,
   actualizarClase,
@@ -25,6 +26,7 @@ const {
 } = require("../../middlewares/bitacoraMiddleware");
 
 router.post("/",  adminODirectivo, bitacoraCrear, crearClase);
+router.put("/grupo/:grupoId", adminODirectivo, bitacoraActualizar, sincronizarClasesGrupo);
 router.get("/", adminODirectivo, bitacoraConsultar, getClase);
 router.get(
   "/docente/:idDocente",
