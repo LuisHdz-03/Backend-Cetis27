@@ -1,6 +1,7 @@
 const prisma = require("../../config/prisma");
 const bcrypt = require("bcryptjs");
 const XLSX = require("xlsx");
+const { validateBulkRows } = require("../../utils/bulkLoad");
 
 // logica para limpiar la matricula
 const limpiarMatricula = (valor) => {
@@ -106,7 +107,8 @@ const crearDocente = async (req, res) => {
       credenciales: {
         username: resultado.usuario.username,
         password_inicial: passwordInicial,
-        aviso: "El usuario debe cambiar la contraseña en el primer inicio de sesión.",
+        aviso:
+          "El usuario debe cambiar la contraseña en el primer inicio de sesión.",
       },
       datos: {
         nombre: resultado.usuario.nombre,
@@ -181,6 +183,13 @@ const cargarDocentesMasivos = async (req, res) => {
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const datosExcel = XLSX.utils.sheet_to_json(sheet);
 
+    const validacionCarga = validateBulkRows(datosExcel);
+    if (validacionCarga) {
+      return res
+        .status(validacionCarga.status)
+        .json({ ok: false, error: validacionCarga.error });
+    }
+
     const errores = [];
     const datosInsertados = [];
 
@@ -190,6 +199,7 @@ const cargarDocentesMasivos = async (req, res) => {
       const maternoExcel = fila["MATERNO"];
       const curpExcel = fila["CURP"];
       const numEmpleadoExcel = fila["NUM EMPLEADO"];
+      const especialidadExcel = fila["ESPECIALIDAD"] || fila["CARRERA"];
 
       if (!nombreExcel || !numEmpleadoExcel || !curpExcel) {
         errores.push({
@@ -205,10 +215,32 @@ const cargarDocentesMasivos = async (req, res) => {
         const usernameGenerado = numEmpleadoLimpio;
         const passwordInicial = extraerFechaPasswordDesdeCURP(curpExcel);
         const emailExcel = fila["EMAIL"];
-        const emailNormalizado = emailExcel ? String(emailExcel).trim().toLowerCase() : null;
+        const emailNormalizado = emailExcel
+          ? String(emailExcel).trim().toLowerCase()
+          : null;
+        let especialidadId = null;
 
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(passwordInicial, salt);
+        if (especialidadExcel) {
+          const especialidad = await prisma.especialidad.findFirst({
+            where: {
+              nombre: {
+                equals: String(especialidadExcel).trim(),
+                mode: "insensitive",
+              },
+            },
+            select: { idEspecialidad: true },
+          });
+
+          if (!especialidad) {
+            errores.push({
+              numeroEmpleado: numEmpleadoExcel,
+              error: `La especialidad \"${especialidadExcel}\" no existe`,
+            });
+            continue;
+          }
+
+          especialidadId = especialidad.idEspecialidad;
+        }
 
         await prisma.$transaction(async (tx) => {
           // Buscar si ya existe un docente con ese número de empleado
@@ -245,6 +277,11 @@ const cargarDocentesMasivos = async (req, res) => {
             )
               usuarioUpdate.fechaNacimiento = fechaNac;
 
+            const docenteUpdate = {};
+            if (especialidadId !== docenteExistente.especialidadId) {
+              docenteUpdate.especialidadId = especialidadId;
+            }
+
             // Actualizar usuario si hay cambios
             if (Object.keys(usuarioUpdate).length > 0) {
               await tx.usuario.update({
@@ -252,8 +289,17 @@ const cargarDocentesMasivos = async (req, res) => {
                 data: usuarioUpdate,
               });
             }
+
+            if (Object.keys(docenteUpdate).length > 0) {
+              await tx.docente.update({
+                where: { idDocente: docenteExistente.idDocente },
+                data: docenteUpdate,
+              });
+            }
           } else {
             // Si no existe, crear nuevo
+            const hashedPassword = await bcrypt.hash(passwordInicial, 10);
+
             const nuevoUsuario = await tx.usuario.create({
               data: {
                 nombre: nombreExcel,
@@ -274,6 +320,7 @@ const cargarDocentesMasivos = async (req, res) => {
               data: {
                 numeroEmpleado: numEmpleadoLimpio,
                 usuarioId: nuevoUsuario.idUsuario,
+                especialidadId,
               },
             });
           }
@@ -475,16 +522,25 @@ const descargarPlantillaDocentes = async (req, res) => {
         MATERNO: "LOPEZ",
         CURP: "GOLM850101MDFRPR01",
         EMAIL: "docente@correo.com",
+        ESPECIALIDAD: "PROGRAMACION",
       },
     ];
 
     const instrucciones = [
-      { CAMPO: "NUM EMPLEADO", DESCRIPCION: "Numero de empleado (obligatorio)" },
+      {
+        CAMPO: "NUM EMPLEADO",
+        DESCRIPCION: "Numero de empleado (obligatorio)",
+      },
       { CAMPO: "NOMBRE", DESCRIPCION: "Nombre del docente (obligatorio)" },
       { CAMPO: "PATERNO", DESCRIPCION: "Apellido paterno (opcional)" },
       { CAMPO: "MATERNO", DESCRIPCION: "Apellido materno (opcional)" },
       { CAMPO: "CURP", DESCRIPCION: "CURP (obligatorio)" },
       { CAMPO: "EMAIL", DESCRIPCION: "Correo electronico (opcional)" },
+      {
+        CAMPO: "ESPECIALIDAD",
+        DESCRIPCION:
+          "Nombre de la especialidad existente para asignar al docente (opcional)",
+      },
     ];
 
     const wb = XLSX.utils.book_new();

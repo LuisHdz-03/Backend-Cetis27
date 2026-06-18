@@ -33,7 +33,6 @@ const registrarAcceso = async (req, res) => {
       return res.status(404).json({ mensaje: "Matricula no encontrada" });
     }
 
-    // CORREGIDO: accesos
     const ultimoAcceso = await prisma.accesos.findFirst({
       where: { alumnoId: alumno.idEstudiante },
       orderBy: { fechaHora: "desc" },
@@ -45,8 +44,7 @@ const registrarAcceso = async (req, res) => {
       const fechaUltimo = new Date(ultimoAcceso.fechaHora);
       const fechaActual = new Date();
 
-      // ---> ESCUDO ANTI-DOBLE ESCANEO AGREGADO AQUÍ <---
-      // Si la diferencia es menor a 2 minutos (120,000 milisegundos), se bloquea.
+      // con esto evitamos que el codigo se escanee dos veces.
       const tiempoDesdeUltimoAcceso =
         fechaActual.getTime() - fechaUltimo.getTime();
       if (tiempoDesdeUltimoAcceso < 120000) {
@@ -68,7 +66,6 @@ const registrarAcceso = async (req, res) => {
       }
     }
 
-    // CORREGIDO: accesos
     const nuevoRegistro = await prisma.accesos.create({
       data: {
         tipo: nuevoTipo,
@@ -91,7 +88,6 @@ const registrarAcceso = async (req, res) => {
 
 const getAccesos = async (req, res) => {
   try {
-    // CORREGIDO: accesos
     const accesos = await prisma.accesos.findMany({
       include: {
         alumno: {

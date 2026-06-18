@@ -1,5 +1,6 @@
 const prisma = require("../../config/prisma");
 const XLSX = require("xlsx");
+const { validateBulkRows } = require("../../utils/bulkLoad");
 
 const tiposValidos = ["AULA", "AREACOMUN", "AREA COMUN", "AREA_COMUN"];
 
@@ -24,19 +25,19 @@ const mapearTipoEspacio = (tipoEntrada) => {
   if (!tipo) return null;
   if (tipo === "AULA") return "AULA";
   if (tipo === "AREACOMUN" || tipo === "AREA COMUN" || tipo === "AREA_COMUN") {
-    return "AREACOMUN";
+    return "AREA_COMUN";
   }
 
   if (palabrasAula.includes(tipo)) return "AULA";
 
-  // Cualquier otro texto libre se considera AREACOMUN
-  // Ejemplos: LABORATORIO, BIBLIOTECA, CANCHA, PATIO, TALLER, etc.
-  return "AREACOMUN";
+  return "AREA_COMUN";
 };
 
 const formatearTipoSalida = (tipo) => {
   const normalizado = String(tipo || "").toUpperCase();
-  if (normalizado === "AREACOMUN") return "AREA COMUN";
+  if (normalizado === "AREACOMUN" || normalizado === "AREA_COMUN") {
+    return "AREA COMUN";
+  }
   return normalizado.replace(/_/g, " ");
 };
 
@@ -204,10 +205,11 @@ const cargarEspaciosMasivos = async (req, res) => {
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const datosExcel = XLSX.utils.sheet_to_json(sheet);
 
-    if (!Array.isArray(datosExcel) || datosExcel.length === 0) {
-      return res.status(400).json({
+    const validacionCarga = validateBulkRows(datosExcel);
+    if (validacionCarga) {
+      return res.status(validacionCarga.status).json({
         ok: false,
-        error: "El archivo no contiene filas para procesar",
+        error: validacionCarga.error,
       });
     }
 

@@ -1,5 +1,6 @@
 const prisma = require("../../config/prisma");
 const XLSX = require("xlsx");
+const { validateBulkRows } = require("../../utils/bulkLoad");
 
 const getExcelValue = (row, aliases = []) => {
   for (const alias of aliases) {
@@ -340,6 +341,13 @@ const cargarMateriasMasivas = async (req, res) => {
     const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const datosExcel = XLSX.utils.sheet_to_json(sheet);
+
+    const validacionCarga = validateBulkRows(datosExcel);
+    if (validacionCarga) {
+      return res
+        .status(validacionCarga.status)
+        .json({ ok: false, error: validacionCarga.error });
+    }
 
     const errores = [];
     const datosInsertados = [];

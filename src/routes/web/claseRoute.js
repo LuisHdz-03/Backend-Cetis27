@@ -1,8 +1,8 @@
 const { Router } = require("express");
 const router = Router();
-const multer = require("multer");
-const storage = multer.memoryStorage();
-const upload = multer({ storage: storage });
+const {
+  uploadExcelSingle,
+} = require("../../middlewares/excelUploadMiddleware");
 
 const {
   crearClase,
@@ -25,12 +25,17 @@ const {
   bitacoraCargaMasiva,
 } = require("../../middlewares/bitacoraMiddleware");
 
-router.post("/",  adminODirectivo, bitacoraCrear, crearClase);
-router.put("/grupo/:grupoId", adminODirectivo, bitacoraActualizar, sincronizarClasesGrupo);
+router.post("/", adminODirectivo, bitacoraCrear, crearClase);
+router.put(
+  "/grupo/:grupoId",
+  adminODirectivo,
+  bitacoraActualizar,
+  sincronizarClasesGrupo,
+);
 router.get("/", adminODirectivo, bitacoraConsultar, getClase);
 router.get(
   "/docente/:idDocente",
-  
+
   verificarRol("ADMINISTRATIVO", "DIRECTIVO", "DOCENTE"),
   bitacoraConsultar,
   getClaseByDocente,
@@ -38,16 +43,16 @@ router.get(
 router.put("/:id", adminODirectivo, bitacoraActualizar, actualizarClase);
 router.get(
   "/horarios/plantilla/excel",
-  
+
   adminODirectivo,
   bitacoraConsultar,
   descargarPlantillaHorarios,
 );
 router.post(
   "/horarios/masivo",
-  
+
   adminODirectivo,
-  upload.single("archivoExcel"),
+  uploadExcelSingle("archivoExcel"),
   bitacoraCargaMasiva,
   cargarHorariosMasivos,
 );

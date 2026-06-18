@@ -1,6 +1,7 @@
 const prisma = require("../../config/prisma");
 const bcrypt = require("bcryptjs");
 const XLSX = require("xlsx");
+const { validateBulkRows } = require("../../utils/bulkLoad");
 
 // Generador de token alfanumérico único de 10 caracteres
 const generarTokenPadre = async (tx) => {
@@ -191,6 +192,13 @@ const cargarDatosMasivos = async (req, res) => {
     const sheet = workbook.Sheets[sheetName];
     const datosExcel = XLSX.utils.sheet_to_json(sheet);
 
+    const validacionCarga = validateBulkRows(datosExcel);
+    if (validacionCarga) {
+      return res
+        .status(validacionCarga.status)
+        .json({ ok: false, error: validacionCarga.error });
+    }
+
     const errores = [];
     const datosInsertados = [];
 
@@ -248,9 +256,6 @@ const cargarDatosMasivos = async (req, res) => {
           });
           continue;
         }
-
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(passwordInicial, salt);
 
         await prisma.$transaction(async (tx) => {
           const estudianteExistente = await tx.estudiante.findUnique({
@@ -314,6 +319,8 @@ const cargarDatosMasivos = async (req, res) => {
               });
             }
           } else {
+            const hashedPassword = await bcrypt.hash(passwordInicial, 10);
+
             const nuevoUsuario = await tx.usuario.create({
               data: {
                 nombre: nombreExcel,

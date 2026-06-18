@@ -1,8 +1,6 @@
 const { Router } = require("express");
 const router = Router();
-const multer = require("multer");
-const storage = multer.memoryStorage();
-const upload = multer({ storage: storage });
+const { uploadExcelSingle } = require("../../middlewares/excelUploadMiddleware");
 
 const {
   registrarAsistencia,
@@ -61,7 +59,7 @@ router.get(
 router.post(
   "/masivo",
   verificarRol("ADMINISTRATIVO", "DIRECTIVO", "PREFECTO", "DOCENTE"),
-  upload.single("archivoExcel"),
+  uploadExcelSingle("archivoExcel"),
   bitacoraCargaMasiva,
   cargarAsistenciasMasivas,
 );

@@ -1,9 +1,120 @@
 const prisma = require("../../config/prisma");
 const XLSX = require("xlsx");
+const { validateBulkRows } = require("../../utils/bulkLoad");
 
-const estatusValidos = ["PRESENTE", "AUSENTE", "RETARDO", "JUSTIFICADA"];
+const estatusValidos = ["PRESENTE", "FALTA", "RETARDO", "JUSTIFICADA"];
+const mensajeEstatusValidos =
+  "PRESENTE, FALTA, RETARDO, JUSTIFICADA o JUSTIFICADO";
 
 const normalizarTexto = (valor) => String(valor || "").trim();
+
+const normalizarEstatusAsistencia = (valor) => {
+  const estatus = normalizarTexto(valor).toUpperCase();
+
+  if (estatus === "JUSTIFICADO") {
+    return "JUSTIFICADA";
+  }
+
+  if (estatus === "AUSENTE") {
+    return "FALTA";
+  }
+
+  return estatus;
+};
+
+const normalizarFechaLocal = (fecha) => {
+  if (!(fecha instanceof Date) || Number.isNaN(fecha.getTime())) {
+    return null;
+  }
+
+  return new Date(
+    fecha.getFullYear(),
+    fecha.getMonth(),
+    fecha.getDate(),
+    12,
+    0,
+    0,
+    0,
+  );
+};
+
+const parsearFechaAsistencia = (valor) => {
+  if (valor === undefined || valor === null || valor === "") {
+    return null;
+  }
+
+  if (valor instanceof Date) {
+    return normalizarFechaLocal(valor);
+  }
+
+  if (typeof valor === "number") {
+    const partes = XLSX.SSF.parse_date_code(valor);
+
+    if (!partes) {
+      return null;
+    }
+
+    return new Date(partes.y, partes.m - 1, partes.d, 12, 0, 0, 0);
+  }
+
+  const texto = normalizarTexto(valor);
+  const matchIso = texto.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  if (matchIso) {
+    const [, year, month, day] = matchIso;
+    return new Date(Number(year), Number(month) - 1, Number(day), 12, 0, 0, 0);
+  }
+
+  return normalizarFechaLocal(new Date(texto));
+};
+
+const formatearFechaLocal = (fecha) => {
+  const fechaNormalizada = normalizarFechaLocal(fecha);
+
+  if (!fechaNormalizada) {
+    return null;
+  }
+
+  const year = fechaNormalizada.getFullYear();
+  const month = String(fechaNormalizada.getMonth() + 1).padStart(2, "0");
+  const day = String(fechaNormalizada.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+};
+
+const construirRangoFechaLocal = (valor) => {
+  const fechaBase = parsearFechaAsistencia(valor);
+
+  if (!fechaBase || Number.isNaN(fechaBase.getTime())) {
+    return null;
+  }
+
+  return {
+    inicio: new Date(
+      fechaBase.getFullYear(),
+      fechaBase.getMonth(),
+      fechaBase.getDate(),
+      0,
+      0,
+      0,
+      0,
+    ),
+    fin: new Date(
+      fechaBase.getFullYear(),
+      fechaBase.getMonth(),
+      fechaBase.getDate(),
+      23,
+      59,
+      59,
+      999,
+    ),
+  };
+};
+
+const formatearAsistenciaSalida = (asistencia) => ({
+  ...asistencia,
+  fecha: formatearFechaLocal(asistencia.fecha),
+});
 
 const buscarEstudiantePorMatricula = async (matricula) => {
   const texto = normalizarTexto(matricula);
@@ -61,14 +172,16 @@ const resolverClaseParaAsistencia = async ({
   if (clases.length === 0) {
     return {
       ok: false,
-      error: "No se encontro clase activa para el alumno con los filtros proporcionados",
+      error:
+        "No se encontro clase activa para el alumno con los filtros proporcionados",
     };
   }
 
   if (clases.length > 1) {
     return {
       ok: false,
-      error: "Hay mas de una clase posible. Agrega MATERIA para evitar ambiguedad",
+      error:
+        "Hay mas de una clase posible. Agrega MATERIA para evitar ambiguedad",
     };
   }
 
@@ -93,7 +206,9 @@ const registrarAsistencia = async (req, res) => {
     const docenteUsuarioId =
       req.usuario?.rol === "DOCENTE" ? parseInt(req.usuario.id, 10) : null;
 
-    const fechaParaGuardar = fecha ? new Date(fecha) : new Date();
+    const fechaParaGuardar = fecha
+      ? parsearFechaAsistencia(fecha)
+      : normalizarFechaLocal(new Date());
     if (isNaN(fechaParaGuardar.getTime())) {
       return res.status(400).json({ mensaje: "Fecha invalida" });
     }
@@ -102,18 +217,21 @@ const registrarAsistencia = async (req, res) => {
     const errores = [];
 
     for (const item of listaFuente) {
-      const estatus = normalizarTexto(item.estatus).toUpperCase();
+      const estatus = normalizarEstatusAsistencia(item.estatus);
       const matricula = normalizarTexto(item.matricula);
 
       if (!matricula) {
-        errores.push({ referencia: "N/D", error: "Cada registro requiere MATRICULA" });
+        errores.push({
+          referencia: "N/D",
+          error: "Cada registro requiere MATRICULA",
+        });
         continue;
       }
 
       if (!estatusValidos.includes(estatus)) {
         errores.push({
           referencia: matricula,
-          error: "Estatus invalido. Usa PRESENTE, AUSENTE, RETARDO o JUSTIFICADA",
+          error: `Estatus invalido. Usa ${mensajeEstatusValidos}`,
         });
         continue;
       }
@@ -161,12 +279,14 @@ const registrarAsistencia = async (req, res) => {
     return res.status(201).json({
       mensaje: "Asistencia registrada correctamente",
       totalRegistros: resultado.count,
-      fecha: fechaParaGuardar.toISOString(),
+      fecha: formatearFechaLocal(fechaParaGuardar),
       errores,
     });
   } catch (error) {
     console.error("Error al tomar las asistencias:", error);
-    return res.status(500).json({ mensaje: "Error interno al tomar las asistencias" });
+    return res
+      .status(500)
+      .json({ mensaje: "Error interno al tomar las asistencias" });
   }
 };
 
@@ -178,9 +298,13 @@ const getAsisPorFecha = async (req, res) => {
       return res.status(400).json({ error: "Se requiere claseId y fecha." });
     }
 
-    const fechaBusqueda = new Date(fecha);
-    const inicio = new Date(fechaBusqueda.setHours(0, 0, 0, 0));
-    const fin = new Date(fechaBusqueda.setHours(23, 59, 59, 999));
+    const rangoFecha = construirRangoFechaLocal(fecha);
+
+    if (!rangoFecha) {
+      return res.status(400).json({ error: "Fecha invalida. Usa YYYY-MM-DD." });
+    }
+
+    const { inicio, fin } = rangoFecha;
 
     const asistencias = await prisma.asistencia.findMany({
       where: {
@@ -208,7 +332,7 @@ const getAsisPorFecha = async (req, res) => {
       },
     });
 
-    return res.json(asistencias);
+    return res.json(asistencias.map(formatearAsistenciaSalida));
   } catch (error) {
     return res.status(500).json({ error: "Error al obtener asistencias" });
   }
@@ -229,9 +353,7 @@ const justificarFalta = async (req, res) => {
     const ahora = new Date();
 
     const esHoy =
-      fechaRegistro.getDate() === ahora.getDate() &&
-      fechaRegistro.getMonth() === ahora.getMonth() &&
-      fechaRegistro.getFullYear() === ahora.getFullYear();
+      formatearFechaLocal(fechaRegistro) === formatearFechaLocal(ahora);
 
     if (!esHoy) {
       return res.status(403).json({
@@ -244,7 +366,10 @@ const justificarFalta = async (req, res) => {
       data: { estatus: "JUSTIFICADA" },
     });
 
-    return res.json({ mensaje: "Justificacion exitosa", registro: actualizado });
+    return res.json({
+      mensaje: "Justificacion exitosa",
+      registro: formatearAsistenciaSalida(actualizado),
+    });
   } catch (error) {
     return res.status(500).json({ error: "Error interno al justificar" });
   }
@@ -262,14 +387,22 @@ const getHistorialAsistencias = async (req, res) => {
     if (fechaInicio || fechaFin) {
       whereClause.fecha = {};
       if (fechaInicio) {
-        const inicio = new Date(fechaInicio);
-        inicio.setHours(0, 0, 0, 0);
-        whereClause.fecha.gte = inicio;
+        const rangoInicio = construirRangoFechaLocal(fechaInicio);
+        if (!rangoInicio) {
+          return res
+            .status(400)
+            .json({ error: "fechaInicio invalida. Usa YYYY-MM-DD." });
+        }
+        whereClause.fecha.gte = rangoInicio.inicio;
       }
       if (fechaFin) {
-        const fin = new Date(fechaFin);
-        fin.setHours(23, 59, 59, 999);
-        whereClause.fecha.lte = fin;
+        const rangoFin = construirRangoFechaLocal(fechaFin);
+        if (!rangoFin) {
+          return res
+            .status(400)
+            .json({ error: "fechaFin invalida. Usa YYYY-MM-DD." });
+        }
+        whereClause.fecha.lte = rangoFin.fin;
       }
     }
 
@@ -299,10 +432,12 @@ const getHistorialAsistencias = async (req, res) => {
       ],
     });
 
-    return res.json(historial);
+    return res.json(historial.map(formatearAsistenciaSalida));
   } catch (error) {
     console.error("Error al obtener el historial de asistencias:", error);
-    return res.status(500).json({ error: "Error al obtener el historial de asistencias." });
+    return res
+      .status(500)
+      .json({ error: "Error al obtener el historial de asistencias." });
   }
 };
 
@@ -317,14 +452,22 @@ const exportarHistorialAsistenciasExcel = async (req, res) => {
     if (fechaInicio || fechaFin) {
       whereClause.fecha = {};
       if (fechaInicio) {
-        const inicio = new Date(fechaInicio);
-        inicio.setHours(0, 0, 0, 0);
-        whereClause.fecha.gte = inicio;
+        const rangoInicio = construirRangoFechaLocal(fechaInicio);
+        if (!rangoInicio) {
+          return res
+            .status(400)
+            .json({ error: "fechaInicio invalida. Usa YYYY-MM-DD." });
+        }
+        whereClause.fecha.gte = rangoInicio.inicio;
       }
       if (fechaFin) {
-        const fin = new Date(fechaFin);
-        fin.setHours(23, 59, 59, 999);
-        whereClause.fecha.lte = fin;
+        const rangoFin = construirRangoFechaLocal(fechaFin);
+        if (!rangoFin) {
+          return res
+            .status(400)
+            .json({ error: "fechaFin invalida. Usa YYYY-MM-DD." });
+        }
+        whereClause.fecha.lte = rangoFin.fin;
       }
     }
 
@@ -352,7 +495,7 @@ const exportarHistorialAsistenciasExcel = async (req, res) => {
     });
 
     const filas = historial.map((registro) => ({
-      FECHA: registro.fecha.toISOString(),
+      FECHA: formatearFechaLocal(registro.fecha),
       MATERIA: registro.clase?.materias?.nombre || "",
       ALUMNO_MATRICULA: registro.alumno?.matricula || "",
       ALUMNO_NOMBRE:
@@ -394,7 +537,7 @@ const descargarPlantillaAsistencias = async (req, res) => {
       },
       {
         FECHA: "2026-04-07",
-        ESTATUS: "AUSENTE",
+        ESTATUS: "FALTA",
         MATRICULA: "22603061070032",
         MATERIA: "PROGRAMACION WEB",
       },
@@ -407,7 +550,7 @@ const descargarPlantillaAsistencias = async (req, res) => {
       },
       {
         CAMPO: "ESTATUS",
-        DESCRIPCION: "Obligatorio. PRESENTE, AUSENTE, RETARDO o JUSTIFICADA",
+        DESCRIPCION: `Obligatorio. ${mensajeEstatusValidos}`,
       },
       {
         CAMPO: "MATRICULA",
@@ -440,7 +583,9 @@ const descargarPlantillaAsistencias = async (req, res) => {
     return res.send(buffer);
   } catch (error) {
     console.error("Error al generar plantilla de asistencias:", error);
-    return res.status(500).json({ error: "Error al generar plantilla de asistencias" });
+    return res
+      .status(500)
+      .json({ error: "Error al generar plantilla de asistencias" });
   }
 };
 
@@ -454,6 +599,13 @@ const cargarAsistenciasMasivas = async (req, res) => {
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const datosExcel = XLSX.utils.sheet_to_json(sheet);
 
+    const validacionCarga = validateBulkRows(datosExcel);
+    if (validacionCarga) {
+      return res
+        .status(validacionCarga.status)
+        .json({ ok: false, error: validacionCarga.error });
+    }
+
     const errores = [];
     const registrosNuevos = [];
     const usuarioId = parseInt(req.usuario?.id, 10);
@@ -465,8 +617,8 @@ const cargarAsistenciasMasivas = async (req, res) => {
 
       const matricula = normalizarTexto(fila["MATRICULA"]);
       const materiaNombre = normalizarTexto(fila["MATERIA"]);
-      const fecha = fila["FECHA"] ? new Date(fila["FECHA"]) : null;
-      const estatus = normalizarTexto(fila["ESTATUS"]).toUpperCase();
+      const fecha = parsearFechaAsistencia(fila["FECHA"]);
+      const estatus = normalizarEstatusAsistencia(fila["ESTATUS"]);
 
       if (!fecha || !estatus || !matricula) {
         errores.push({
@@ -487,7 +639,7 @@ const cargarAsistenciasMasivas = async (req, res) => {
       if (!estatusValidos.includes(estatus)) {
         errores.push({
           fila: numeroFila,
-          error: `Estatus invalido '${estatus}'. Usa PRESENTE, AUSENTE, RETARDO o JUSTIFICADA`,
+          error: `Estatus invalido '${estatus}'. Usa ${mensajeEstatusValidos}`,
         });
         continue;
       }
@@ -539,7 +691,9 @@ const cargarAsistenciasMasivas = async (req, res) => {
     });
   } catch (error) {
     console.error("Error en carga masiva de asistencias:", error);
-    return res.status(500).json({ error: "Error interno al cargar asistencias" });
+    return res
+      .status(500)
+      .json({ error: "Error interno al cargar asistencias" });
   }
 };
 

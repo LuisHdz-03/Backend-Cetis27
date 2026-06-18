@@ -255,11 +255,6 @@ const generarYEnviarTokenRecuperacion = async (usuario, emailDestino) => {
   );
 };
 
-// Flujo:
-// 1. Enviar { username } → si tiene correo, se manda el enlace.
-// 2. Si no tiene correo, back responde { ok: false, necesitaCorreo: true }.
-// 3. Cliente reenvía { username, email, curp } → back verifica CURP, registra
-//    el correo y manda el enlace de recuperación.
 const solicitarRecuperacionPassword = async (req, res) => {
   try {
     const { username, email, curp } = req.body;

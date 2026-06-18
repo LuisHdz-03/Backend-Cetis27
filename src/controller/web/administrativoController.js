@@ -3,6 +3,7 @@ const bcrypt = require("bcryptjs");
 const XLSX = require("xlsx");
 const sharp = require("sharp");
 const cloudinary = require("cloudinary").v2;
+const { validateBulkRows } = require("../../utils/bulkLoad");
 
 const limpiarMatricula = (valor) => {
   if (valor === undefined || valor === null) return null;
@@ -287,6 +288,13 @@ const cargarAdministrativosMasivos = async (req, res) => {
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const datosExcel = XLSX.utils.sheet_to_json(sheet);
 
+    const validacionCarga = validateBulkRows(datosExcel);
+    if (validacionCarga) {
+      return res
+        .status(validacionCarga.status)
+        .json({ ok: false, error: validacionCarga.error });
+    }
+
     const errores = [];
     const datosInsertados = [];
 
@@ -329,9 +337,6 @@ const cargarAdministrativosMasivos = async (req, res) => {
         const fechaNac = extraerFechaDesdeCURP(curpExcel);
         const usernameGenerado = numEmpleadoLimpio;
         const passwordInicial = extraerFechaPasswordDesdeCURP(curpExcel);
-
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(passwordInicial, salt);
 
         await prisma.$transaction(async (tx) => {
           // Buscar si ya existe un administrativo con ese número de empleado
@@ -407,6 +412,8 @@ const cargarAdministrativosMasivos = async (req, res) => {
           } else {
             // Si no existe, crear nuevo
             await validarDirectorUnicoActivo(tx, cargoNormalizado);
+
+            const hashedPassword = await bcrypt.hash(passwordInicial, 10);
 
             const nuevoUsuario = await tx.usuario.create({
               data: {
