@@ -41,34 +41,18 @@ async function registrarAccionEnBitacora(
   resObj,
 ) {
   try {
-    if (!req.usuario || !req.usuario.id) {
+    if (
+      !req.usuario ||
+      !req.usuario.id ||
+      req.method === "GET" ||
+      accionBase === "CONSULTAR"
+    ) {
       return;
     }
 
     const accion = construirAccion(req, accionBase);
 
-    const firmaConsulta = accion.startsWith("CONSULTAR")
-      ? construirFirmaConsulta(req)
-      : null;
-
-    if (firmaConsulta) {
-      const umbral = new Date(Date.now() - CONSULTA_VENTANA_SEGUNDOS * 1000);
-      const yaExiste = await prisma.bitacora.findFirst({
-        where: {
-          usuarioId: parseInt(req.usuario.id),
-          accion: { startsWith: "CONSULTAR" },
-          fecha: { gte: umbral },
-          detalle: { contains: `RefConsulta:${firmaConsulta}` },
-        },
-        select: { idBitacora: true },
-      });
-
-      if (yaExiste) {
-        return;
-      }
-    }
-
-    const detalle = construirDetalle(req, responseData, firmaConsulta, resObj);
+    const detalle = construirDetalle(req, responseData, null, resObj);
 
     await prisma.bitacora.create({
       data: {
@@ -180,17 +164,6 @@ function construirDetalle(
   const metodo = req.method;
   const detalles = [];
 
-  const ip = obtenerIpCliente(req);
-  const ruta = obtenerRutaCompleta(req);
-  const userAgent = String(req.headers["user-agent"] || "N/D").slice(0, 140);
-
-  detalles.push(`Metodo: ${metodo}`);
-  detalles.push(`Ruta: ${ruta}`);
-  detalles.push(
-    `Status: ${resObj?.statusCode || req.res?.statusCode || "N/D"}`,
-  );
-  detalles.push(`IP: ${ip}`);
-  detalles.push(`UA: ${userAgent}`);
   if (req.usuario?.id)
     detalles.push(`Actor: ID ${req.usuario.id} (${req.usuario.rol || "N/D"})`);
 
@@ -213,25 +186,11 @@ function construirDetalle(
       if (req.params.id) detalles.push(`ID eliminado: ${req.params.id}`);
       if (responseData?.mensaje) detalles.push(responseData.mensaje);
       break;
-
-    case "GET":
-      if (req.params.id) detalles.push(`ID consultado: ${req.params.id}`);
-      else detalles.push("Listado/consulta");
-      if (req.query && Object.keys(req.query).length > 0) {
-        detalles.push(
-          `Filtros: ${JSON.stringify(normalizarObjeto(req.query))}`,
-        );
-      }
-      break;
   }
 
   const camposEditados = limpiarCamposSensibles(req.body);
   if (["POST", "PUT", "PATCH"].includes(metodo) && camposEditados.length > 0) {
     detalles.push(`Campos: ${camposEditados.slice(0, 12).join(", ")}`);
-  }
-
-  if (firmaConsulta) {
-    detalles.push(`RefConsulta:${firmaConsulta}`);
   }
 
   const detalleFinal = detalles.join(" | ") || "Sin detalles adicionales";
