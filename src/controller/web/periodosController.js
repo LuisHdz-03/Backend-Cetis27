@@ -163,10 +163,36 @@ const cerrarPeriodoYPromover = async (req, res) => {
   }
 };
 
+const updatePeriodo = async (req, res) => {
+  const { idPeriodo } = req.params;
+  const { nombre, codigo, fechaInicio, fechaFin } = req.body;
+
+  try {
+    const dataToUpdate = {};
+    if (nombre) dataToUpdate.nombre = nombre;
+    if (codigo) dataToUpdate.codigo = codigo;
+    if (fechaInicio) dataToUpdate.fechaInicio = new Date(fechaInicio);
+    if (fechaFin) dataToUpdate.fechaFin = new Date(fechaFin);
+
+    const periodoActualizado = await prisma.periodo.update({
+      where: { idPeriodo: parseInt(idPeriodo) },
+      data: dataToUpdate,
+    });
+    res.json(periodoActualizado);
+  } catch (error) {
+    console.error("Error al actualizar periodo:", error);
+    if (error.code === "P2025") {
+      return res.status(404).json({ error: "Periodo no encontrado." });
+    }
+    res.status(500).json({ error: "Error al actualizar el periodo." });
+  }
+};
+
 module.exports = {
   crearPeriodo,
   getPeriodos,
   getPeriodoActivo,
   setPeriodoActual,
   cerrarPeriodoYPromover,
+  updatePeriodo,
 };

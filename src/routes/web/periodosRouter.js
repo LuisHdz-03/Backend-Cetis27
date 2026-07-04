@@ -6,6 +6,7 @@ const {
   getPeriodoActivo,
   setPeriodoActual,
   cerrarPeriodoYPromover,
+  updatePeriodo,
 } = require("../../controller/web/periodosController");
 
 const {
@@ -30,6 +31,12 @@ router.get(
   verificarRol("ADMINISTRATIVO", "DIRECTIVO", "DOCENTE"),
   bitacoraConsultar,
   getPeriodoActivo,
+);
+router.put(
+  "/:idPeriodo",
+  adminODirectivo,
+  bitacoraActualizar,
+  updatePeriodo,
 );
 router.put(
   "/activar/:idPeriodo",
