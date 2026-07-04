@@ -53,12 +53,14 @@ async function registrarAccionEnBitacora(
     const accion = construirAccion(req, accionBase);
 
     const detalle = construirDetalle(req, responseData, null, resObj);
+    const ip = obtenerIpCliente(req);
 
     await prisma.bitacora.create({
       data: {
         usuarioId: parseInt(req.usuario.id),
         accion: accion,
         detalle: detalle,
+        ip: ip,
       },
     });
   } catch (error) {
@@ -163,9 +165,6 @@ function construirDetalle(
 ) {
   const metodo = req.method;
   const detalles = [];
-
-  if (req.usuario?.id)
-    detalles.push(`Actor: ID ${req.usuario.id} (${req.usuario.rol || "N/D"})`);
 
   switch (metodo) {
     case "POST":
