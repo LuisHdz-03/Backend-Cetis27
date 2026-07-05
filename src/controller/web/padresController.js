@@ -3,12 +3,14 @@ const jwt = require("jsonwebtoken");
 
 const loginPadre = async (req, res) => {
   try {
-    const { clave } = req.body;
+    const clave = String(
+      req.body?.clave || req.body?.token || req.body?.tokenPadre || "",
+    ).trim();
 
     if (!clave) {
       return res
         .status(400)
-        .json({ error: "La clave del alumno es obligatoria." });
+        .json({ error: "La clave/token del alumno es obligatoria." });
     }
 
     const estudiante = await prisma.estudiante.findFirst({

@@ -11,6 +11,10 @@ const {
 const uploads = require("../../middlewares/uploadMiddleware");
 const { loginLimiter } = require("../../middlewares/rateLimitMiddleware");
 const { login } = require("../../controller/auth/authController");
+const { loginPadre } = require("../../controller/web/padresController");
+const {
+  consultarEstatusCompletoEstudiante,
+} = require("../../controller/movil/estatusEstudianteController");
 const {
   getAlumnosMovil,
   uploadFotiko,
@@ -27,6 +31,18 @@ router.get("/", (req, res) => {
 });
 
 router.post("/auth/login", loginLimiter, bitacoraLogin, login);
+router.post("/padres/login", loginPadre);
+router.post("/padre/login", loginPadre);
+router.post("/movil/padres/login", loginPadre);
+router.post("/movil/padre/login", loginPadre);
+router.get(
+  "/padres/estatus-completo/:idEstudiante",
+  consultarEstatusCompletoEstudiante,
+);
+router.get(
+  "/padre/estatus-completo/:idEstudiante",
+  consultarEstatusCompletoEstudiante,
+);
 router.use(verificarToken);
 
 router.get("/perfil", bitacoraConsultar, getAlumnosMovil);
