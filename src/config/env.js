@@ -48,7 +48,12 @@ if (!Number.isInteger(port) || port <= 0 || port > 65535) {
 }
 
 const jwtSecret = requireEnv("JWT_SECRET");
-if (isProduction && jwtSecret.length < 32) {
+const allowWeakJwtSecret = parseBoolean(
+  process.env.ALLOW_WEAK_JWT_SECRET,
+  false,
+);
+
+if (isProduction && !allowWeakJwtSecret && jwtSecret.length < 32) {
   throw new Error("JWT_SECRET must be at least 32 characters in production");
 }
 
@@ -69,4 +74,5 @@ module.exports = {
   trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
   jsonBodyLimit: process.env.JSON_BODY_LIMIT || "1mb",
   httpLogsEnabled: parseBoolean(process.env.HTTP_LOGS_ENABLED, !isProduction),
+  allowWeakJwtSecret,
 };

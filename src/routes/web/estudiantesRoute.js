@@ -2,7 +2,7 @@ const { Router } = require("express");
 const router = Router();
 const { uploadExcelSingle } = require("../../middlewares/excelUploadMiddleware");
 
-const { adminODirectivo } = require("../../middlewares/authMiddleware");
+const { adminODirectivo, verificarRol } = require("../../middlewares/authMiddleware");
 const {
   bitacoraCrear,
   bitacoraActualizar,
@@ -31,7 +31,12 @@ router.get(
 
 // ...existing code...
 router.post("/", adminODirectivo, bitacoraCrear, crearEstudiante);
-router.get("/", adminODirectivo, bitacoraConsultar, getEstudiantes);
+router.get(
+  "/",
+  verificarRol("ADMINISTRATIVO", "DIRECTIVO", "PREFECTO"),
+  bitacoraConsultar,
+  getEstudiantes,
+);
 router.post(
   "/masivo",
   adminODirectivo,
@@ -41,7 +46,6 @@ router.post(
 );
 router.put("/:id", adminODirectivo, bitacoraActualizar, actualizarEstudiante);
 router.delete("/:id", adminODirectivo, bitacoraEliminar, eliminarEstudiante);
-const { soloDocente } = require("../../middlewares/authMiddleware");
 router.get(
   "/grupo/:grupoId",
   (req, res, next) => {
