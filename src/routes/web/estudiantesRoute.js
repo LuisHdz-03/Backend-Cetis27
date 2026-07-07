@@ -1,8 +1,13 @@
 const { Router } = require("express");
 const router = Router();
-const { uploadExcelSingle } = require("../../middlewares/excelUploadMiddleware");
+const {
+  uploadExcelSingle,
+} = require("../../middlewares/excelUploadMiddleware");
 
-const { adminODirectivo, verificarRol } = require("../../middlewares/authMiddleware");
+const {
+  adminODirectivo,
+  verificarRol,
+} = require("../../middlewares/authMiddleware");
 const {
   bitacoraCrear,
   bitacoraActualizar,
@@ -26,7 +31,7 @@ router.get(
   "/credenciales",
   adminODirectivo,
   bitacoraConsultar,
-  require("../../controller/web/estudianteController").getDatosCredenciales
+  require("../../controller/web/estudianteController").getDatosCredenciales,
 );
 
 // ...existing code...
@@ -54,7 +59,9 @@ router.get(
     if (["ADMINISTRATIVO", "DIRECTIVO", "DOCENTE"].includes(rol)) {
       return next();
     }
-    return res.status(403).json({ error: "No tienes permisos suficientes para ver este grupo." });
+    return res
+      .status(403)
+      .json({ error: "No tienes permisos suficientes para ver este grupo." });
   },
   bitacoraConsultar,
   getEstudiantesPorGrupo,
