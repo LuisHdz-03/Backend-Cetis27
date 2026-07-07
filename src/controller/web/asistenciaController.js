@@ -1,6 +1,10 @@
 const prisma = require("../../config/prisma");
 const XLSX = require("xlsx");
-const { validateBulkRows } = require("../../utils/bulkLoad");
+const {
+  validateBulkRows,
+  buildBulkProcessingMessage,
+  parseExcelRowsSafe,
+} = require("../../utils/bulkLoad");
 
 const estatusValidos = ["PRESENTE", "FALTA", "RETARDO", "JUSTIFICADA"];
 const mensajeEstatusValidos =
@@ -283,7 +287,6 @@ const registrarAsistencia = async (req, res) => {
       errores,
     });
   } catch (error) {
-    console.error("Error al tomar las asistencias:", error);
     return res
       .status(500)
       .json({ mensaje: "Error interno al tomar las asistencias" });
@@ -434,7 +437,6 @@ const getHistorialAsistencias = async (req, res) => {
 
     return res.json(historial.map(formatearAsistenciaSalida));
   } catch (error) {
-    console.error("Error al obtener el historial de asistencias:", error);
     return res
       .status(500)
       .json({ error: "Error al obtener el historial de asistencias." });
@@ -521,7 +523,6 @@ const exportarHistorialAsistenciasExcel = async (req, res) => {
 
     return res.send(buffer);
   } catch (error) {
-    console.error("Error al exportar asistencias:", error);
     return res.status(500).json({ error: "Error al exportar asistencias" });
   }
 };
@@ -582,7 +583,6 @@ const descargarPlantillaAsistencias = async (req, res) => {
 
     return res.send(buffer);
   } catch (error) {
-    console.error("Error al generar plantilla de asistencias:", error);
     return res
       .status(500)
       .json({ error: "Error al generar plantilla de asistencias" });
@@ -595,9 +595,7 @@ const cargarAsistenciasMasivas = async (req, res) => {
       return res.status(400).json({ error: "No se subio ningun archivo" });
     }
 
-    const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const datosExcel = XLSX.utils.sheet_to_json(sheet);
+    const datosExcel = parseExcelRowsSafe(req.file.buffer);
 
     const validacionCarga = validateBulkRows(datosExcel);
     if (validacionCarga) {
@@ -685,12 +683,15 @@ const cargarAsistenciasMasivas = async (req, res) => {
     return res.json({
       ok: true,
       mensaje: "Carga masiva de asistencias finalizada",
+      resultadoProcesamiento: buildBulkProcessingMessage(
+        registrosNuevos.length,
+        errores.length,
+      ),
       insertados: registrosNuevos.length,
       fallidos: errores.length,
       detalles: errores,
     });
   } catch (error) {
-    console.error("Error en carga masiva de asistencias:", error);
     return res
       .status(500)
       .json({ error: "Error interno al cargar asistencias" });

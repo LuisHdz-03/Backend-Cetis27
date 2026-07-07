@@ -3,7 +3,11 @@ const bcrypt = require("bcryptjs");
 const XLSX = require("xlsx");
 const sharp = require("sharp");
 const cloudinary = require("cloudinary").v2;
-const { validateBulkRows } = require("../../utils/bulkLoad");
+const {
+  validateBulkRows,
+  buildBulkProcessingMessage,
+  parseExcelRowsSafe,
+} = require("../../utils/bulkLoad");
 
 const limpiarMatricula = (valor) => {
   if (valor === undefined || valor === null) return null;
@@ -219,7 +223,6 @@ const crearAdministrativo = async (req, res) => {
       data: nuevoAdmin,
     });
   } catch (error) {
-    console.error(error);
     if (error.code === "P2002") {
       return res.status(400).json({
         ok: false,
@@ -284,9 +287,7 @@ const cargarAdministrativosMasivos = async (req, res) => {
       return res.status(400).json({ ok: false, msg: "No se subió archivo" });
     }
 
-    const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const datosExcel = XLSX.utils.sheet_to_json(sheet);
+    const datosExcel = parseExcelRowsSafe(req.file.buffer);
 
     const validacionCarga = validateBulkRows(datosExcel);
     if (validacionCarga) {
@@ -443,7 +444,6 @@ const cargarAdministrativosMasivos = async (req, res) => {
 
         datosInsertados.push(numEmpleadoLimpio);
       } catch (error) {
-        console.error(`Error con administrativo ${numEmpleadoExcel}: `, error);
         let msg = "Error al procesar la fila";
         if (error.code === "P2002")
           msg = "Dato duplicado (CURP/Username/Email/Num Empleado)";
@@ -455,12 +455,15 @@ const cargarAdministrativosMasivos = async (req, res) => {
 
     res.json({
       ok: true,
+      resultadoProcesamiento: buildBulkProcessingMessage(
+        datosInsertados.length,
+        errores.length,
+      ),
       insertados: datosInsertados.length,
       fallidos: errores.length,
       detalles: errores,
     });
   } catch (error) {
-    console.error(error);
     res.status(500).json({ ok: false, msg: "Error de servidor" });
   }
 };
@@ -485,7 +488,6 @@ const asignarMateria = async (req, res) => {
       clase: nuevaClase,
     });
   } catch (error) {
-    console.error(error);
     res.status(500).json({ ok: false, msg: "Error al realizar la asignación" });
   }
 };
@@ -599,7 +601,6 @@ const actualizarAdministrativo = async (req, res) => {
       data: actualizado,
     });
   } catch (error) {
-    console.error("Error al actualizar administrador:", error);
 
     if (error.code === "DIRECTOR_ACTIVO_DUPLICADO") {
       return res.status(400).json({
@@ -652,7 +653,6 @@ const eliminarAdministrativo = async (req, res) => {
 
     res.json({ ok: true, mensaje: "Administrador desactivado correctamente" });
   } catch (error) {
-    console.error("Error al desactivar administrador:", error);
     res.status(500).json({
       ok: false,
       error: "Error interno al intentar desactivar al administrador",
@@ -710,7 +710,6 @@ const descargarPlantillaAdministrativos = async (req, res) => {
 
     return res.send(buffer);
   } catch (error) {
-    console.error("Error al generar plantilla de administrativos:", error);
     return res
       .status(500)
       .json({ error: "Error al generar plantilla de administrativos" });
@@ -744,7 +743,6 @@ const procesarImagenFirma = async (buffer) => {
 
     return transparentSignature;
   } catch (error) {
-    console.error("Error procesando imagen de firma:", error);
     throw error;
   }
 };
@@ -753,7 +751,6 @@ const subirFirmaDirector = async (req, res) => {
   try {
     const archivo = req.file;
     if (!archivo) {
-      console.log("[FIRMA] No se recibió archivo en la petición");
       return res.status(400).json({ error: "Debes subir una imagen" });
     }
 
@@ -816,7 +813,6 @@ const subirFirmaDirector = async (req, res) => {
       firmaUrl: uploadResult.secure_url,
     });
   } catch (error) {
-    console.error("ERROR CRÍTICO AL SUBIR FIRMA:", error);
     res
       .status(500)
       .json({ error: "Error interno al procesar la firma en el servidor." });
@@ -862,7 +858,6 @@ const obtenerDirectorActivo = async (req, res) => {
       firmaImagenUrl: director.firmaImagenUrl || null, // Agregamos la firma
     });
   } catch (error) {
-    console.error("Error al obtener director activo:", error);
     res
       .status(500)
       .json({ ok: false, error: "Error interno al buscar director." });

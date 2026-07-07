@@ -115,7 +115,6 @@ const verificarToken = async (req, res, next) => {
       return res.status(401).json({ error: "Token de seguridad inválido." });
     }
 
-    console.error("Error en verificarToken:", err.message);
     return res
       .status(500)
       .json({ error: "Error de conexión con el servidor de seguridad." });

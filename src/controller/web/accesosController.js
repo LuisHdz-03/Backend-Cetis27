@@ -81,7 +81,6 @@ const registrarAcceso = async (req, res) => {
       hora: new Date(),
     });
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: "Error al registrar acceso" });
   }
 };
@@ -114,7 +113,6 @@ const getAccesos = async (req, res) => {
     });
     res.json(accesos);
   } catch (error) {
-    console.error(error);
     res.status(500).json({ mensaje: "Error al obtener los accesos" });
   }
 };

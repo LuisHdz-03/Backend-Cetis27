@@ -34,7 +34,6 @@ const getBitacora = async (req, res) => {
 
     res.json(logsMapeados);
   } catch (error) {
-    console.error("Error en getBitacora:", error);
     res.status(500).json({ error: "Error al leer bitácora." });
   }
 };
@@ -51,7 +50,6 @@ const registrarAccion = async (usuarioId, accion, detalle) => {
       },
     });
   } catch (error) {
-    console.error("No se pudo guardar en bitácora:", error);
   }
 };
 

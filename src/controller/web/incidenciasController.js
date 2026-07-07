@@ -69,7 +69,6 @@ const crearReporte = async (req, res) => {
       reporte: nuevoReporte,
     });
   } catch (error) {
-    console.error("Error al crear el reporte en la BD:", error);
     return res.status(500).json({
       error: "Error interno al crear el reporte",
     });
@@ -212,7 +211,6 @@ const getReporte = async (req, res) => {
 
     res.json(reportes);
   } catch (error) {
-    console.error("Error en getReporte:", error);
     res.status(500).json({ error: "Error al obtener los reportes" });
   }
 };
@@ -250,7 +248,6 @@ const getDocentesParaReporte = async (req, res) => {
 
     return res.json(lista);
   } catch (error) {
-    console.error(error);
     return res
       .status(500)
       .json({ error: "Error al obtener lista de docentes" });
@@ -275,7 +272,6 @@ const atenderReporte = async (req, res) => {
       reporte: reporteActualizado,
     });
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: "No se pudo actualizar el reporte." });
   }
 };

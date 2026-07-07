@@ -1,6 +1,10 @@
 const prisma = require("../../config/prisma");
 const XLSX = require("xlsx");
-const { validateBulkRows } = require("../../utils/bulkLoad");
+const {
+  validateBulkRows,
+  buildBulkProcessingMessage,
+  parseExcelRowsSafe,
+} = require("../../utils/bulkLoad");
 
 const includeClaseDetalle = {
   grupo: {
@@ -558,7 +562,6 @@ const crearClase = async (req, res) => {
         clase: formatearClaseSalida(nuevaClase),
       });
   } catch (error) {
-    console.error("Error crítico al crear la clase:", error);
     if (error.status) {
       return res.status(error.status).json({ error: error.message });
     }
@@ -715,7 +718,6 @@ const sincronizarClasesGrupo = async (req, res) => {
       clases: clasesActualizadas.map(formatearClaseSalida),
     });
   } catch (error) {
-    console.error("Error al sincronizar clases del grupo:", error);
     if (error.status) {
       return res.status(error.status).json({ error: error.message });
     }
@@ -786,7 +788,6 @@ const getClase = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error al traer clases:", error);
     res.status(500).json({ error: "No se pudieron traer las clases" });
   }
 };
@@ -821,7 +822,6 @@ const getClaseByDocente = async (req, res) => {
 
     res.json(clases.map(formatearClaseSalida));
   } catch (error) {
-    console.error("Error al obtener carga académica:", error);
     res.status(500).json({ error: "No se pudo obtener la carga academica" });
   }
 };
@@ -921,7 +921,6 @@ const actualizarClase = async (req, res) => {
       clase: formatearClaseSalida(claseActualizada),
     });
   } catch (error) {
-    console.error("Error al actualizar clase:", error);
     res.status(500).json({ error: "Error al actualizar la clase" });
   }
 };
@@ -1004,7 +1003,6 @@ const descargarPlantillaHorarios = async (req, res) => {
 
     return res.send(buffer);
   } catch (error) {
-    console.error("Error al generar plantilla de horarios:", error);
     return res
       .status(500)
       .json({ error: "Error al generar plantilla de horarios" });
@@ -1017,9 +1015,7 @@ const cargarHorariosMasivos = async (req, res) => {
       return res.status(400).json({ ok: false, error: "No se subió archivo" });
     }
 
-    const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const filas = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+    const filas = parseExcelRowsSafe(req.file.buffer, { defval: "" });
 
     const validacionCarga = validateBulkRows(filas);
     if (validacionCarga) {
@@ -1190,12 +1186,15 @@ const cargarHorariosMasivos = async (req, res) => {
     return res.json({
       ok: errores.length === 0,
       mensaje: `Carga masiva de horarios finalizada. Procesados: ${procesados.length}. Errores: ${errores.length}`,
+      resultadoProcesamiento: buildBulkProcessingMessage(
+        procesados.length,
+        errores.length,
+      ),
       clasesAfectadas: cacheClases.size,
       procesados,
       errores,
     });
   } catch (error) {
-    console.error("Error en carga masiva de horarios:", error);
     return res
       .status(500)
       .json({ ok: false, error: "Error al cargar horarios masivamente" });

@@ -1,6 +1,10 @@
 const prisma = require("../../config/prisma");
 const XLSX = require("xlsx");
-const { validateBulkRows } = require("../../utils/bulkLoad");
+const {
+  validateBulkRows,
+  buildBulkProcessingMessage,
+  parseExcelRowsSafe,
+} = require("../../utils/bulkLoad");
 
 const getExcelValue = (row, aliases = []) => {
   for (const alias of aliases) {
@@ -81,7 +85,6 @@ const crearGrupo = async (req, res) => {
       .status(201)
       .json({ mensaje: "Grupo creado exitosamente", grupo: nuevoGrupo });
   } catch (error) {
-    console.error("Error al crear grupo:", error);
     res.status(500).json({ error: "Error al crear grupo" });
   }
 };
@@ -143,7 +146,6 @@ const getGrupos = async (req, res) => {
     });
     res.json(grupos);
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: "Error al obtener grupos" });
   }
 };
@@ -318,7 +320,6 @@ const actualizarGrupo = async (req, res) => {
       grupo: grupoActualizado,
     });
   } catch (error) {
-    console.error(error);
     return res.status(500).json({ error: "Error al actualizar el grupo" });
   }
 };
@@ -335,7 +336,6 @@ const eliminarGrupo = async (req, res) => {
 
     res.json({ mensaje: "Grupo eliminado correctamente" });
   } catch (error) {
-    console.error(error);
     if (error.code === "P2003") {
       return res.status(400).json({
         error: "No se puede eliminar el grupo por que hay alumnos asignados",
@@ -351,9 +351,7 @@ const cargarGruposMasivos = async (req, res) => {
       return res.status(400).json({ error: "No se subió ningún archivo" });
     }
 
-    const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const datosExcel = XLSX.utils.sheet_to_json(sheet);
+    const datosExcel = parseExcelRowsSafe(req.file.buffer);
 
     const validacionCarga = validateBulkRows(datosExcel);
     if (validacionCarga) {
@@ -494,7 +492,6 @@ const cargarGruposMasivos = async (req, res) => {
           datosInsertados.push(nuevoGrupo.nombre);
         }
       } catch (error) {
-        console.error("Error al insertar grupo:", error);
         errores.push({
           registro: nombre,
           error: error.message || "Error al guardar el grupo",
@@ -505,12 +502,15 @@ const cargarGruposMasivos = async (req, res) => {
     res.json({
       ok: true,
       mensaje: "Carga masiva finalizada",
+      resultadoProcesamiento: buildBulkProcessingMessage(
+        datosInsertados.length,
+        errores.length,
+      ),
       insertados: datosInsertados.length,
       fallidos: errores.length,
       detalles: errores,
     });
   } catch (error) {
-    console.error("Error en carga masiva de grupos:", error);
     res.status(500).json({ error: "Error interno del servidor" });
   }
 };
@@ -573,7 +573,6 @@ const descargarPlantillaGrupos = async (req, res) => {
 
     return res.send(buffer);
   } catch (error) {
-    console.error("Error al generar plantilla de grupos:", error);
     return res
       .status(500)
       .json({ error: "Error al generar plantilla de grupos" });

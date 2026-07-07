@@ -1,6 +1,10 @@
 const prisma = require("../../config/prisma");
 const XLSX = require("xlsx");
-const { validateBulkRows } = require("../../utils/bulkLoad");
+const {
+  validateBulkRows,
+  buildBulkProcessingMessage,
+  parseExcelRowsSafe,
+} = require("../../utils/bulkLoad");
 
 const tiposValidos = ["AULA", "AREACOMUN", "AREA COMUN", "AREA_COMUN"];
 
@@ -74,7 +78,6 @@ const crearEspacio = async (req, res) => {
       espacio: formatearEspacioSalida(espacio),
     });
   } catch (error) {
-    console.error(error);
     if (error.code === "P2002") {
       return res
         .status(400)
@@ -113,7 +116,6 @@ const getEspacios = async (req, res) => {
 
     return res.json(espacios.map(formatearEspacioSalida));
   } catch (error) {
-    console.error(error);
     return res.status(500).json({ error: "Error al obtener espacios" });
   }
 };
@@ -155,7 +157,6 @@ const actualizarEspacio = async (req, res) => {
       espacio: formatearEspacioSalida(espacio),
     });
   } catch (error) {
-    console.error(error);
     if (error.code === "P2002") {
       return res
         .status(400)
@@ -187,7 +188,6 @@ const eliminarEspacio = async (req, res) => {
       espacio: formatearEspacioSalida(espacio),
     });
   } catch (error) {
-    console.error(error);
     if (error.code === "P2025") {
       return res.status(404).json({ error: "Espacio no encontrado" });
     }
@@ -201,9 +201,7 @@ const cargarEspaciosMasivos = async (req, res) => {
       return res.status(400).json({ ok: false, error: "No se subió archivo" });
     }
 
-    const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const datosExcel = XLSX.utils.sheet_to_json(sheet);
+    const datosExcel = parseExcelRowsSafe(req.file.buffer);
 
     const validacionCarga = validateBulkRows(datosExcel);
     if (validacionCarga) {
@@ -271,7 +269,6 @@ const cargarEspaciosMasivos = async (req, res) => {
           procesados.push({ nombre, accion: "creado" });
         }
       } catch (error) {
-        console.error(`Error procesando espacio en fila ${numeroFila}:`, error);
         errores.push({
           fila: numeroFila,
           error: "Error al procesar la fila",
@@ -282,11 +279,14 @@ const cargarEspaciosMasivos = async (req, res) => {
     return res.json({
       ok: errores.length === 0,
       mensaje: `Carga masiva finalizada. Procesados: ${procesados.length}. Errores: ${errores.length}`,
+      resultadoProcesamiento: buildBulkProcessingMessage(
+        procesados.length,
+        errores.length,
+      ),
       procesados,
       errores,
     });
   } catch (error) {
-    console.error("Error en carga masiva de espacios:", error);
     return res
       .status(500)
       .json({ ok: false, error: "Error al cargar espacios masivamente" });
@@ -343,7 +343,6 @@ const descargarPlantillaEspacios = async (req, res) => {
 
     return res.send(buffer);
   } catch (error) {
-    console.error("Error al generar plantilla de espacios:", error);
     return res
       .status(500)
       .json({ error: "Error al generar plantilla de espacios" });

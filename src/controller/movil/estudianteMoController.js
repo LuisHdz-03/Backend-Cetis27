@@ -75,7 +75,6 @@ const actualizarDatosContacto = async (req, res) => {
       usuario: usuarioActualizado,
     });
   } catch (error) {
-    console.error("Error al actualizar datos de contacto:", error);
     res
       .status(500)
       .json({ error: "Error al actualizar los datos de contacto" });
@@ -198,7 +197,6 @@ const guardarDisenioCredencialMovil = async (req, res) => {
       sincronizadoEn: payload.sincronizadoEn,
     });
   } catch (error) {
-    console.error("Error guardando diseño de credencial móvil:", error);
     return res
       .status(500)
       .json({ error: "No se pudo guardar el diseño de credencial." });
@@ -217,9 +215,6 @@ if (
   !process.env.CLOUDINARY_API_KEY ||
   !process.env.CLOUDINARY_API_SECRET
 ) {
-  console.error(
-    "⚠️  Faltan variables de entorno de Cloudinary: CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET",
-  );
 }
 
 const getAlumnosMovil = async (req, res) => {
@@ -283,7 +278,6 @@ const getAlumnosMovil = async (req, res) => {
     }
     res.json(estudiante);
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: "Error al encontrar el perfil." });
   }
 };
@@ -336,9 +330,7 @@ const uploadFotiko = async (req, res) => {
         const publicId = `${carpeta}/${archivo}`;
 
         await cloudinary.uploader.destroy(publicId);
-        console.log(`Foto vieja eliminada de Cloudinary: ${publicId}`);
       } catch (e) {
-        console.error("Error al borrar foto vieja en Cloudinary:", e);
       }
     }
 
@@ -352,7 +344,6 @@ const uploadFotiko = async (req, res) => {
       fotoUrl: estudianteActualizado.fotoUrl,
     });
   } catch (error) {
-    console.error("Error al subir imagen a Cloudinary:", error);
     res.status(500).json({ error: "Error al procesar la imagen" });
   }
 };
@@ -417,7 +408,6 @@ const actualizartutor = async (req, res) => {
       tutor: estudianteActualizado.tutor,
     });
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: "Error al registrar el tutor." });
   }
 };
@@ -532,17 +522,9 @@ const getCredencial = async (req, res) => {
     respuesta.firmaDigital = firmaDigital;
 
     // Imprimimos en la terminal del backend para verificar que sí manda los datos
-    console.log("Datos enviados a la app (credencial con director y firma):", {
-      curp: respuesta.curp,
-      grupo: respuesta.grupo,
-      director: respuesta.director,
-      imagenFirmaDirector: respuesta.imagenFirmaDirector,
-      firmaHashCortada: firmaDigital.substring(0, 20) + "...",
-    });
 
     res.json(respuesta);
   } catch (error) {
-    console.error("Error en getCredencial:", error);
     res.status(500).json({ error: "Error al obtener la credencial." });
   }
 };
@@ -564,7 +546,6 @@ const getHistorialAccesos = async (req, res) => {
 
     res.json(accesos);
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: "Error al obtener los accesos " });
   }
 };
@@ -634,7 +615,6 @@ const getAsistencias = async (req, res) => {
 
     res.json(historialLimpio);
   } catch (error) {
-    console.error("Error al obtener asistencias:", error);
     res.status(500).json({ error: "Error al obtener asistencias" });
   }
 };
@@ -679,7 +659,6 @@ const getReportesEstudianteMovil = async (req, res) => {
 
     res.json(reportesLimpios);
   } catch (error) {
-    console.error("Error al obtener reportes móvil:", error);
     res.status(500).json({ error: "Error al obtener los reportes" });
   }
 };
@@ -737,7 +716,6 @@ const cambiarContrasenia = async (req, res) => {
 
     res.json({ mensaje: "Contraseña actualizada correctamente." });
   } catch (error) {
-    console.error("Error al cambiar contraseña:", error);
     res.status(500).json({ error: "Error al cambiar la contraseña." });
   }
 };
@@ -792,7 +770,6 @@ const verificarFirmaCredencial = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error al verificar firma:", error);
     res.status(500).json({ error: "Error al verificar la firma" });
   }
 };

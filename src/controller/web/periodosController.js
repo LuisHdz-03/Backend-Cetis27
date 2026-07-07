@@ -22,7 +22,6 @@ const crearPeriodo = async (req, res) => {
 
     res.status(201).json(nuevoPeriodo);
   } catch (error) {
-    console.error("Error al crear periodo:", error);
     res.status(500).json({ error: "Error al crear periodo." });
   }
 };
@@ -43,7 +42,6 @@ const getPeriodos = async (req, res) => {
 
     res.json(periodos);
   } catch (error) {
-    console.error("Error al obtener periodos:", error);
     res.status(500).json({ error: "Error al obtener periodos." });
   }
 };
@@ -61,7 +59,6 @@ const getPeriodoActivo = async (req, res) => {
 
     return res.json(periodoActivo);
   } catch (error) {
-    console.error("Error al obtener periodo activo:", error);
     return res.status(500).json({ error: "Error al obtener periodo activo." });
   }
 };
@@ -82,7 +79,6 @@ const setPeriodoActual = async (req, res) => {
 
     res.json({ mensaje: `Periodo ${idPeriodo} establecido como ACTUAL.` });
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: "Error al cambiar de periodo." });
   }
 };
@@ -158,7 +154,6 @@ const cerrarPeriodoYPromover = async (req, res) => {
         "Periodo cerrado correctamente. Estudiantes promovidos y grupos actualizados al siguiente semestre.",
     });
   } catch (error) {
-    console.error("Error al cerrar periodo:", error);
     res.status(500).json({ error: "Error interno al cerrar el periodo." });
   }
 };
@@ -180,7 +175,6 @@ const updatePeriodo = async (req, res) => {
     });
     res.json(periodoActualizado);
   } catch (error) {
-    console.error("Error al actualizar periodo:", error);
     if (error.code === "P2025") {
       return res.status(404).json({ error: "Periodo no encontrado." });
     }

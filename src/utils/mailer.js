@@ -36,10 +36,6 @@ const enviarCorreoRecuperacion = async ({
   const transporter = obtenerTransporte();
 
   if (!transporter) {
-    console.warn(
-      "[RECUPERACION] SMTP no configurado. Enlace generado:",
-      enlace,
-    );
     return { enviado: false, enlaceFallback: enlace };
   }
 

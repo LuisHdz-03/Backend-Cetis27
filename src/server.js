@@ -1,35 +1,42 @@
 require("dotenv").config();
 const app = require("./app");
 const prisma = require("./config/prisma");
-const PORT = process.env.PORT || 4000;
+const env = require("./config/env");
 
-process.on("unhandledRejection", (reason) => {
-  console.error("Promesa no manejada:", reason);
+let server;
+let isShuttingDown = false;
+
+const gracefulShutdown = async () => {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+
+  try {
+    if (server) {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  } finally {
+    await prisma.$disconnect();
+    process.exit(0);
+  }
+};
+
+process.on("unhandledRejection", async () => {
+  await gracefulShutdown();
 });
 
-process.on("uncaughtException", (error) => {
-  console.error("Excepción no capturada:", error);
-  process.exit(1);
+process.on("uncaughtException", async () => {
+  await gracefulShutdown();
 });
 
 async function main() {
   try {
     await prisma.$connect();
-    const server = app.listen(PORT, () => {
-      console.log(`\n Servidor Cetis27 corriendo en: http://localhost:${PORT}`);
-      console.log(` API Web:   http://localhost:${PORT}/api/web`);
-      console.log(` API Móvil: http://localhost:${PORT}/api/movil`);
-    });
+    server = app.listen(env.port, () => {});
 
-    process.on("SIGTERM", async () => {
-      console.log("SIGTERM recibido, cerrando servidor...");
-      server.close(async () => {
-        await prisma.$disconnect();
-        process.exit(0);
-      });
-    });
+    process.on("SIGTERM", gracefulShutdown);
+    process.on("SIGINT", gracefulShutdown);
   } catch (error) {
-    console.error("error al inicializar el servidor: ", error);
+    await prisma.$disconnect();
     process.exit(1);
   }
 }

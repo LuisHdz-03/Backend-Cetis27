@@ -37,7 +37,6 @@ const consultarEstatusEstudiante = async (req, res) => {
       estudiante,
     });
   } catch (error) {
-    console.error("Error al consultar estatus del estudiante:", error);
     res
       .status(500)
       .json({ error: "Error al consultar estatus del estudiante" });
@@ -146,7 +145,6 @@ const consultarEstatusCompletoEstudiante = async (req, res) => {
       reportes: reportesLimpios,
     });
   } catch (error) {
-    console.error("Error al consultar estatus completo del estudiante:", error);
     res
       .status(500)
       .json({ error: "Error al consultar estatus completo del estudiante" });

@@ -24,7 +24,6 @@ const registrarEnBitacora = (accionBase) => {
     res.json = function (data) {
       if (res.statusCode >= 200 && res.statusCode < 300) {
         registrarAccionEnBitacora(req, accionBase, data, res).catch((error) => {
-          console.error("Error al registrar en bitácora:", error);
         });
       }
       return originalJson(data);
@@ -53,18 +52,15 @@ async function registrarAccionEnBitacora(
     const accion = construirAccion(req, accionBase);
 
     const detalle = construirDetalle(req, responseData, null, resObj);
-    const ip = obtenerIpCliente(req);
 
     await prisma.bitacora.create({
       data: {
         usuarioId: parseInt(req.usuario.id),
         accion: accion,
         detalle: detalle,
-        ip: ip,
       },
     });
   } catch (error) {
-    console.error("❌ Error al guardar en bitácora:", error);
   }
 }
 
@@ -208,7 +204,6 @@ async function registrarAccionManual(usuarioId, accion, detalle) {
       },
     });
   } catch (error) {
-    console.error("Error al registrar acción manual en bitácora:", error);
   }
 }
 

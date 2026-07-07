@@ -108,7 +108,6 @@ const login = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: "Error en el servidor." });
   }
 };
@@ -160,7 +159,6 @@ const cambiarPassword = async (req, res) => {
 
     res.json({ ok: true, mensaje: "Contraseña actualizada exitosamente" });
   } catch (error) {
-    console.error("Error al cambiar contraseña:", error);
     res.status(500).json({ error: "Error interno del servidor" });
   }
 };
@@ -220,7 +218,6 @@ const cambiarPasswordObligatorio = async (req, res) => {
         "Contraseña actualizada exitosamente. Por favor, inicia sesión nuevamente con tu nueva contraseña.",
     });
   } catch (error) {
-    console.error("Error al cambiar contraseña obligatoria:", error);
     res.status(500).json({ error: "Error interno del servidor" });
   }
 };
@@ -351,7 +348,6 @@ const solicitarRecuperacionPassword = async (req, res) => {
 
     return res.json({ ok: true, mensaje: mensajeGenerico });
   } catch (error) {
-    console.error("Error al solicitar recuperación de contraseña:", error);
     return res.status(500).json({ error: "Error interno del servidor" });
   }
 };
@@ -417,7 +413,6 @@ const restablecerPasswordConToken = async (req, res) => {
       mensaje: "Contraseña restablecida correctamente",
     });
   } catch (error) {
-    console.error("Error al restablecer contraseña:", error);
     return res.status(500).json({ error: "Error interno del servidor" });
   }
 };
@@ -477,7 +472,6 @@ const getMiPerfil = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error al obtener mi perfil:", error);
     return res.status(500).json({ error: "Error interno del servidor" });
   }
 };
@@ -528,7 +522,6 @@ const registrarCorreo = async (req, res) => {
 
     return res.json({ ok: true, mensaje: "Correo registrado correctamente" });
   } catch (error) {
-    console.error("Error al registrar correo:", error);
     return res.status(500).json({ error: "Error interno del servidor" });
   }
 };
@@ -659,7 +652,6 @@ const completarPerfil = async (req, res) => {
       camposFaltantes,
     });
   } catch (error) {
-    console.error("Error al completar perfil:", error);
     return res.status(500).json({ error: "Error interno del servidor" });
   }
 };
@@ -702,7 +694,6 @@ const getDatosPerfilEditable = async (req, res) => {
       camposFaltantes,
     });
   } catch (error) {
-    console.error("Error al obtener datos editables de perfil:", error);
     return res.status(500).json({ error: "Error interno del servidor" });
   }
 };

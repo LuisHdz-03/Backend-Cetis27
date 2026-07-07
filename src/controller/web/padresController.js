@@ -46,7 +46,6 @@ const loginPadre = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error en loginPadre:", error);
     res.status(500).json({ error: "Error en el servidor." });
   }
 };
@@ -85,7 +84,6 @@ const grupoEstudiante = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error al consultar grupo del estudiante:", error);
     res.status(500).json({ error: "Error en el servidor" });
   }
 };

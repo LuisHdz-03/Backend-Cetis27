@@ -1,7 +1,11 @@
 const prisma = require("../../config/prisma");
 const bcrypt = require("bcryptjs");
 const XLSX = require("xlsx");
-const { validateBulkRows } = require("../../utils/bulkLoad");
+const {
+  validateBulkRows,
+  buildBulkProcessingMessage,
+  parseExcelRowsSafe,
+} = require("../../utils/bulkLoad");
 
 // Generador de token alfanumérico único de 10 caracteres
 const generarTokenPadre = async (tx) => {
@@ -135,11 +139,9 @@ const crearEstudiante = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error(error);
     if (error.code === "P2002") {
       return res.status(400).json({ error: "El alumno ya existe " });
     }
-    console.error(error);
     res.status(500).json({ error: "error en el servidor" });
   }
 };
@@ -176,7 +178,6 @@ const getEstudiantes = async (req, res) => {
 
     res.json(estudiantes);
   } catch (error) {
-    console.error(error);
     res.status(500).json({ erro: "Error al obtener los alumnos" });
   }
 };
@@ -187,10 +188,7 @@ const cargarDatosMasivos = async (req, res) => {
       return res.status(400).json({ ok: false, msg: "No se subió archivo" });
     }
 
-    const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
-    const sheetName = workbook.SheetNames[0];
-    const sheet = workbook.Sheets[sheetName];
-    const datosExcel = XLSX.utils.sheet_to_json(sheet);
+    const datosExcel = parseExcelRowsSafe(req.file.buffer);
 
     const validacionCarga = validateBulkRows(datosExcel);
     if (validacionCarga) {
@@ -356,7 +354,6 @@ const cargarDatosMasivos = async (req, res) => {
 
         datosInsertados.push(matriculaExcel);
       } catch (error) {
-        console.error(`Error con ${matriculaExcel}:`, error);
         let msg = "Error desconocido";
         if (error.code === "P2002") msg = "Alumno/Usuario duplicado";
 
@@ -366,12 +363,15 @@ const cargarDatosMasivos = async (req, res) => {
 
     res.json({
       ok: true,
+      resultadoProcesamiento: buildBulkProcessingMessage(
+        datosInsertados.length,
+        errores.length,
+      ),
       insertados: datosInsertados.length,
       fallidos: errores.length,
       detalles: errores,
     });
   } catch (error) {
-    console.error(error);
     res.status(500).json({ ok: false, msg: "Error de servidor" });
   }
 };
@@ -542,7 +542,6 @@ const actualizarEstudiante = async (req, res) => {
       estudiante: estudianteActualizado,
     });
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: "Error al actualizar el estudiante" });
   }
 };
@@ -566,7 +565,6 @@ const eliminarEstudiante = async (req, res) => {
 
     res.json({ mensaje: "Estudiante dado de baja correctamente" });
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: "Error al dar de baja al estudiante" });
   }
 };
@@ -595,7 +593,6 @@ const getEstudiantesPorGrupo = async (req, res) => {
 
     res.json(alumnos);
   } catch (error) {
-    console.error("Error al obtener alumnos por grupo:", error);
     res.status(500).json({ error: "Error al obtener la lista de estudiantes" });
   }
 };
@@ -634,7 +631,6 @@ const descargarPlantillaEstudiantes = async (req, res) => {
 
     return res.send(buffer);
   } catch (error) {
-    console.error("Error al generar plantilla de estudiantes:", error);
     return res
       .status(500)
       .json({ error: "Error al generar plantilla de estudiantes" });
@@ -689,7 +685,6 @@ const getDatosCredenciales = async (req, res) => {
 
     res.json(resultado);
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: "Error al obtener datos de credenciales" });
   }
 };

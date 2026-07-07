@@ -3,13 +3,12 @@ const cors = require("cors");
 const morgan = require("morgan");
 const helmet = require("helmet");
 const path = require("path");
+const prisma = require("./config/prisma");
+const env = require("./config/env");
 
 const app = express();
 
-const allowedOrigins = String(process.env.CORS_ORIGINS || "")
-  .split(",")
-  .map((origin) => origin.trim())
-  .filter(Boolean);
+const allowedOrigins = env.corsOrigins;
 
 const corsOptions = {
   origin: (origin, callback) => {
@@ -34,13 +33,15 @@ const corsOptions = {
   optionsSuccessStatus: 204,
 };
 
-app.set("trust proxy", 1);
+app.set("trust proxy", env.trustProxy);
 
 app.use(helmet());
-app.use(morgan("dev"));
+if (env.httpLogsEnabled) {
+  app.use(morgan(env.isProduction ? "combined" : "dev"));
+}
 app.use(cors(corsOptions));
 app.options(/.*/, cors(corsOptions));
-app.use(express.json());
+app.use(express.json({ limit: env.jsonBodyLimit }));
 //routes
 app.use("/api/web", require("./routes/web/admin.routes"));
 app.use("/api/movil", require("./routes/movil/app.routes"));
@@ -55,13 +56,25 @@ app.get("/", (req, res) => {
   });
 });
 
+app.get("/health/live", (req, res) => {
+  res.json({ status: "ok" });
+});
+
+app.get("/health/ready", async (req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ status: "ready" });
+  } catch (error) {
+    res.status(503).json({ status: "not_ready" });
+  }
+});
+
 app.use((err, req, res, next) => {
   if (err && String(err.message || "").includes("CORS")) {
     return res.status(403).json({ error: "Origen no permitido por CORS" });
   }
 
   if (err) {
-    console.error("Error no controlado en Express:", err);
     return res.status(500).json({ error: "Error interno del servidor" });
   }
 

@@ -1,6 +1,10 @@
 const prisma = require("../../config/prisma");
 const XLSX = require("xlsx");
-const { validateBulkRows } = require("../../utils/bulkLoad");
+const {
+  validateBulkRows,
+  buildBulkProcessingMessage,
+  parseExcelRowsSafe,
+} = require("../../utils/bulkLoad");
 
 const crearEspecialidad = async (req, res) => {
   try {
@@ -66,7 +70,6 @@ const actualizarEspecialidad = async (req, res) => {
       especialidad: especialidadActualizada,
     });
   } catch (error) {
-    console.error(error);
     if (error.code === "P2002") {
       return res.status(400).json({
         error: "Ya existe una especialidad con ese nombre o código",
@@ -92,7 +95,6 @@ const eliminarEspecialidad = async (req, res) => {
 
     res.json({ mensaje: "Especialidad eliminada correctamente" });
   } catch (error) {
-    console.error(error);
     if (error.code === "P2003") {
       return res.status(400).json({
         error:
@@ -109,9 +111,7 @@ const cargarEspecialidadesMasivas = async (req, res) => {
       return res.status(400).json({ error: "No se subió ningún archivo" });
     }
 
-    const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const datosExcel = XLSX.utils.sheet_to_json(sheet);
+    const datosExcel = parseExcelRowsSafe(req.file.buffer);
 
     const validacionCarga = validateBulkRows(datosExcel);
     if (validacionCarga) {
@@ -177,7 +177,6 @@ const cargarEspecialidadesMasivas = async (req, res) => {
           datosInsertados.push(nuevaEspe.nombre);
         }
       } catch (error) {
-        console.error("Error al insertar especialidad:", error);
         errores.push({
           registro: nombre,
           error: error.message || "Error al guardar la especialidad",
@@ -188,12 +187,15 @@ const cargarEspecialidadesMasivas = async (req, res) => {
     res.json({
       ok: true,
       mensaje: "Carga masiva finalizada",
+      resultadoProcesamiento: buildBulkProcessingMessage(
+        datosInsertados.length,
+        errores.length,
+      ),
       insertados: datosInsertados.length,
       fallidos: errores.length,
       detalles: errores,
     });
   } catch (error) {
-    console.error("Error en carga masiva de especialidades:", error);
     res.status(500).json({ error: "Error interno del servidor" });
   }
 };
@@ -233,7 +235,6 @@ const descargarPlantillaEspecialidades = async (req, res) => {
 
     return res.send(buffer);
   } catch (error) {
-    console.error("Error al generar plantilla de especialidades:", error);
     return res
       .status(500)
       .json({ error: "Error al generar plantilla de especialidades" });
