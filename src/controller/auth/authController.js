@@ -16,6 +16,11 @@ const getJwtSecret = () => {
   return process.env.JWT_SECRET;
 };
 
+const SESSION_DURATION_SECONDS = {
+  WEB: 8 * 60 * 60,
+  MOVIL: 7 * 24 * 60 * 60,
+};
+
 const login = async (req, res) => {
   try {
     const { username, password, plataforma } = req.body;
@@ -75,6 +80,9 @@ const login = async (req, res) => {
       perfilData = usuario.perfilAdministrativo;
     }
 
+    const duracionSesionSegundos =
+      SESSION_DURATION_SECONDS[plataforma] || SESSION_DURATION_SECONDS.WEB;
+
     const token = jwt.sign(
       {
         id: usuario.idUsuario,
@@ -82,7 +90,11 @@ const login = async (req, res) => {
         nombre: usuario.nombre,
       },
       getJwtSecret(),
-      { expiresIn: plataforma === "WEB" ? "8h" : "7d" },
+      { expiresIn: duracionSesionSegundos },
+    );
+
+    const expiracionSesion = new Date(
+      Date.now() + duracionSesionSegundos * 1000,
     );
 
     await registrarAccionManual(
@@ -94,6 +106,10 @@ const login = async (req, res) => {
     res.json({
       mensaje: `Bienvenido a la plataforma ${plataforma}`,
       token,
+      session: {
+        expiresIn: duracionSesionSegundos,
+        expiresAt: expiracionSesion,
+      },
       passwordChangeRequired: usuario.passwordChangeRequired,
       usuario: {
         id: usuario.idUsuario,

@@ -109,10 +109,16 @@ const verificarToken = async (req, res, next) => {
     if (err.name === "TokenExpiredError") {
       return res
         .status(401)
-        .json({ error: "Tu sesión ha expirado. Ingresa de nuevo." });
+        .json({
+          code: "SESSION_EXPIRED",
+          error: "Tu sesión ha expirado. Ingresa de nuevo.",
+        });
     }
     if (err.name === "JsonWebTokenError") {
-      return res.status(401).json({ error: "Token de seguridad inválido." });
+      return res.status(401).json({
+        code: "INVALID_TOKEN",
+        error: "Token de seguridad inválido.",
+      });
     }
 
     return res
