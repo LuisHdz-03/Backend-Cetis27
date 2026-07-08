@@ -1,20 +1,52 @@
 const prisma = require("../../config/prisma");
 
+const VENTANA_BLOQUEO_QR_MS = 2 * 60 * 1000;
+const VENTANA_EXPIRACION_QR_MS = 60 * 1000;
+const TOLERANCIA_RELOJ_QR_MS = 5 * 1000;
+const qrProcesadosRecientemente = new Map();
+
+const limpiarQrProcesadosExpirados = (ahora) => {
+  for (const [token, datos] of qrProcesadosRecientemente.entries()) {
+    if (ahora - datos.procesadoEn >= VENTANA_BLOQUEO_QR_MS) {
+      qrProcesadosRecientemente.delete(token);
+    }
+  }
+};
+
 const registrarAcceso = async (req, res) => {
   try {
-    const { tokenQR } = req.body;
+    const tokenQR = String(req.body?.tokenQR || "").trim();
 
     if (!tokenQR || !tokenQR.includes("|")) {
       return res.status(400).json({ error: "Formato de QR inválido" });
     }
 
-    const [matricula, timestampQR] = tokenQR.split("|");
+    const [matriculaCruda, timestampQR] = tokenQR.split("|");
+    const matricula = String(matriculaCruda || "").trim();
 
     const ahora = Date.now();
     const tiempoQR = parseInt(timestampQR);
     const diferencia = ahora - tiempoQR;
 
-    if (diferencia > 60000 || diferencia < -5000) {
+    limpiarQrProcesadosExpirados(ahora);
+
+    const qrProcesado = qrProcesadosRecientemente.get(tokenQR);
+    if (qrProcesado && ahora - qrProcesado.procesadoEn < VENTANA_BLOQUEO_QR_MS) {
+      return res.json({
+        ...qrProcesado.respuesta,
+        duplicado: true,
+        mensaje: "Este código QR ya fue procesado hace un momento.",
+        bloqueadoHasta: new Date(
+          qrProcesado.procesadoEn + VENTANA_BLOQUEO_QR_MS,
+        ),
+      });
+    }
+
+    if (
+      Number.isNaN(tiempoQR) ||
+      diferencia > VENTANA_EXPIRACION_QR_MS ||
+      diferencia < -TOLERANCIA_RELOJ_QR_MS
+    ) {
       return res.status(401).json({
         error: "Código QR expirado o inválido. Genere uno nuevo.",
       });
@@ -43,17 +75,6 @@ const registrarAcceso = async (req, res) => {
     if (ultimoAcceso) {
       const fechaUltimo = new Date(ultimoAcceso.fechaHora);
       const fechaActual = new Date();
-
-      // con esto evitamos que el codigo se escanee dos veces.
-      const tiempoDesdeUltimoAcceso =
-        fechaActual.getTime() - fechaUltimo.getTime();
-      if (tiempoDesdeUltimoAcceso < 120000) {
-        return res.status(429).json({
-          error:
-            "Acceso ya registrado hace un momento. Por favor espere 2 minutos para volver a escanear.",
-          tipo_registrado: ultimoAcceso.tipo,
-        });
-      }
       const esMismoDia =
         fechaUltimo.toDateString() === fechaActual.toDateString();
 
@@ -73,13 +94,21 @@ const registrarAcceso = async (req, res) => {
       },
     });
 
-    res.json({
+    const respuesta = {
       mensaje: `Registro exitoso: ${nuevoTipo}`,
       tipo: nuevoTipo,
       alumno: `${alumno.usuario.nombre} ${alumno.usuario.apellidoPaterno}`,
       matricula: matricula,
       hora: new Date(),
+    };
+
+    qrProcesadosRecientemente.set(tokenQR, {
+      procesadoEn: ahora,
+      respuesta,
+      accesoId: nuevoRegistro.idAcceso,
     });
+
+    res.json(respuesta);
   } catch (error) {
     res.status(500).json({ error: "Error al registrar acceso" });
   }
