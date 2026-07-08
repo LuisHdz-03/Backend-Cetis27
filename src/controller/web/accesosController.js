@@ -25,10 +25,21 @@ const registrarAcceso = async (req, res) => {
     const matricula = String(matriculaCruda || "").trim();
 
     const ahora = Date.now();
-    const tiempoQR = parseInt(timestampQR);
+    const tiempoQR = parseInt(timestampQR, 10);
     const diferencia = ahora - tiempoQR;
 
     limpiarQrProcesadosExpirados(ahora);
+
+    if (
+      Number.isNaN(tiempoQR) ||
+      diferencia > VENTANA_EXPIRACION_QR_MS ||
+      diferencia < -TOLERANCIA_RELOJ_QR_MS
+    ) {
+      qrProcesadosRecientemente.delete(tokenQR);
+      return res.status(401).json({
+        error: "Código QR expirado o inválido. Genere uno nuevo.",
+      });
+    }
 
     const qrProcesado = qrProcesadosRecientemente.get(tokenQR);
     if (qrProcesado && ahora - qrProcesado.procesadoEn < VENTANA_BLOQUEO_QR_MS) {
@@ -39,16 +50,6 @@ const registrarAcceso = async (req, res) => {
         bloqueadoHasta: new Date(
           qrProcesado.procesadoEn + VENTANA_BLOQUEO_QR_MS,
         ),
-      });
-    }
-
-    if (
-      Number.isNaN(tiempoQR) ||
-      diferencia > VENTANA_EXPIRACION_QR_MS ||
-      diferencia < -TOLERANCIA_RELOJ_QR_MS
-    ) {
-      return res.status(401).json({
-        error: "Código QR expirado o inválido. Genere uno nuevo.",
       });
     }
 
