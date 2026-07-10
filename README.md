@@ -1,4 +1,4 @@
-# ⚙️ Sistema de Gestión Académica (API Backend) - CETIS 27
+#  Sistema de Gestión Académica (API Backend) - CETIS 27
 
 La API RESTful y el motor de lógica de negocio del ecosistema digital del CETIS 27. Este repositorio contiene el servidor de datos encargado de procesar las reglas de negocio, asegurar los endpoints mediante autenticación por tokens y gestionar la persistencia en la base de datos relacional de forma segura y eficiente.
 
