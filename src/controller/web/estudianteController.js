@@ -148,37 +148,60 @@ const crearEstudiante = async (req, res) => {
 
 const getEstudiantes = async (req, res) => {
   try {
-    const estudiantes = await prisma.estudiante.findMany({
-      include: {
-        usuario: {
-          select: {
-            nombre: true,
-            apellidoPaterno: true,
-            apellidoMaterno: true,
-            username: true,
-            email: true,
-            activo: true,
-            fechaNacimiento: true,
-            curp: true,
-            direccion: true,
-            telefono: true,
-          },
-        },
-        grupo: {
-          select: {
-            nombre: true,
-            grado: true,
-            turno: true,
-            especialidad: true,
-          },
-        },
-        tutor: true,
-      },
-    });
+    // limitamos para que no se sature el servidor
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
 
-    res.json(estudiantes);
+    // 2. Hacer las consultas en paralelo para mayor velocidad
+    const [estudiantes, totalRegistros] = await Promise.all([
+      prisma.estudiante.findMany({
+        skip: skip,
+        take: limit,
+        orderBy: { idEstudiante: 'desc' }, 
+        include: {
+          usuario: {
+            select: {
+              nombre: true,
+              apellidoPaterno: true,
+              apellidoMaterno: true,
+              username: true,
+              email: true,
+              activo: true,
+              fechaNacimiento: true,
+              curp: true,
+              direccion: true,
+              telefono: true,
+            },
+          },
+          grupo: {
+            select: {
+              nombre: true,
+              grado: true,
+              turno: true,
+              especialidad: true,
+            },
+          },
+          tutor: true,
+        },
+      }),
+      prisma.estudiante.count()
+    ]);
+
+    const totalPages = Math.ceil(totalRegistros / limit);
+
+    // respondemos bajo la paginacion y ya
+    res.json({
+      data: estudiantes,
+      pagination: {
+        totalRegistros,
+        totalPages,
+        currentPage: page,
+        limit
+      }
+    });
   } catch (error) {
-    res.status(500).json({ erro: "Error al obtener los alumnos" });
+    res.status(500).json({ error: "Error al obtener los alumnos" });
   }
 };
 
