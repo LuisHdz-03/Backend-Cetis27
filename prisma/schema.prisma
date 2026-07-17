@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model Usuario {
@@ -34,16 +35,16 @@ model Usuario {
 }
 
 model Docente {
-  idDocente         Int           @id @default(autoincrement())
-  numeroEmpleado    String?
-  usuarioId         Int           @unique
-  especialidadId    Int?
-  fechaContratacion DateTime?
-  clases            Clase[]
-  especialidad      Especialidad? @relation(fields: [especialidadId], references: [idEspecialidad])
-  usuario           Usuario       @relation(fields: [usuarioId], references: [idUsuario])
-  gruposComoTutor   Grupo[]       @relation("GrupoTutor")
-  reportesHechos    Reporte[]     @relation("ReportadoPor")
+  idDocente          Int           @id @default(autoincrement())
+  numeroEmpleado     String?
+  usuarioId          Int           @unique
+  especialidadId     Int?
+  fechaContratacion  DateTime?
+  clases             Clase[]
+  especialidad       Especialidad? @relation(fields: [especialidadId], references: [idEspecialidad])
+  usuario            Usuario       @relation(fields: [usuarioId], references: [idUsuario])
+  gruposComoTutor    Grupo[]       @relation("GrupoTutor")
+  reportesHechos     Reporte[]     @relation("ReportadoPor")
 
   @@map("docentes")
 }
@@ -68,6 +69,9 @@ model Estudiante {
   usuario                   Usuario      @relation(fields: [usuarioId], references: [idUsuario])
   reportes                  Reporte[]    @relation("ReporteAlumno")
 
+  @@index([grupoId])
+  @@index([semestre])
+  @@index([tutorId])
   @@map("estudiantes")
 }
 
@@ -84,7 +88,7 @@ model Periodo {
 }
 
 model Especialidad {
-  idEspecialidad Int       @id @default(autoincrement())
+  idEspecialidad Int         @id @default(autoincrement())
   nombre         String
   codigo         String
   descripcion    String?
@@ -123,6 +127,8 @@ model Grupo {
   docenteTutor   Docente      @relation("GrupoTutor", fields: [docenteTutorId], references: [idDocente])
   especialidad   Especialidad @relation(fields: [especialidadId], references: [idEspecialidad])
 
+  @@index([especialidadId])
+  @@index([docenteTutorId])
   @@map("grupos")
 }
 
@@ -157,6 +163,9 @@ model Clase {
   materias    Materia      @relation(fields: [materiaId], references: [idMateria])
   periodo     Periodo      @relation(fields: [periodoId], references: [idPeriodo])
 
+  @@index([grupoId])
+  @@index([docenteId])
+  @@index([periodoId])
   @@map("clases")
 }
 
@@ -169,24 +178,29 @@ model Asistencia {
   alumno       Estudiante @relation(fields: [alumnoId], references: [idEstudiante])
   clase        Clase      @relation(fields: [claseId], references: [idClase])
 
+  @@index([claseId])
+  @@index([alumnoId])
+  @@index([fecha])
   @@map("asistencias")
 }
 
 model Reporte {
-  idReporte       Int        @id @default(autoincrement())
-  titulo          String
-  descripcion     String
-  tipoIncidencia  String
-  nivel           String
-  fecha           DateTime   @default(now())
-  estatus         String     @default("PENDIENTE")
+  idReporte      Int        @id @default(autoincrement())
+  titulo         String
+  descripcion    String
+  tipoIncidencia String
+  nivel          String
+  fecha          DateTime   @default(now())
+  estatus        String     @default("PENDIENTE")
   accionesTomadas String?
-  alumnoId        Int
-  docenteId       Int?
-  reportadoPor    String?
-  alumno          Estudiante @relation("ReporteAlumno", fields: [alumnoId], references: [idEstudiante])
-  docente         Docente?   @relation("ReportadoPor", fields: [docenteId], references: [idDocente])
+  alumnoId       Int
+  docenteId      Int?
+  reportadoPor   String?
+  alumno         Estudiante @relation("ReporteAlumno", fields: [alumnoId], references: [idEstudiante])
+  docente        Docente?   @relation("ReportadoPor", fields: [docenteId], references: [idDocente])
 
+  @@index([alumnoId])
+  @@index([estatus])
   @@map("reportes")
 }
 
@@ -197,6 +211,8 @@ model Accesos {
   alumnoId  Int
   alumno    Estudiante @relation(fields: [alumnoId], references: [idEstudiante])
 
+  @@index([alumnoId])
+  @@index([fechaHora])
   @@map("accesos")
 }
 
@@ -208,6 +224,8 @@ model Bitacora {
   usuarioId  Int
   usuario    Usuario  @relation(fields: [usuarioId], references: [idUsuario])
 
+  @@index([usuarioId])
+  @@index([fecha])
   @@map("bitacoras")
 }
 
