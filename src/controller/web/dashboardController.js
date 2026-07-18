@@ -1,13 +1,8 @@
-const prisma = require("../config/prisma");
+const prisma = require("../../config/prisma");
 
 const getDashboardStats = async (req, res) => {
   try {
-    const [
-      alumnos,
-      docentes,
-      materias,
-      administrativos,
-    ] = await Promise.all([
+    const [alumnos, docentes, materias, administrativos] = await Promise.all([
       prisma.estudiante.count(),
       prisma.docente.count(),
       prisma.materia.count(),
