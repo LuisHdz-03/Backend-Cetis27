@@ -157,24 +157,44 @@ const crearDocente = async (req, res) => {
 
 const getDocentes = async (req, res) => {
   try {
-    const docentes = await prisma.docente.findMany({
-      where: {
-        usuario: { activo: true },
-      },
-      include: {
-        usuario: true,
-        especialidad: true,
-        clases: {
-          include: {
-            materias: true,
-            grupo: true,
+    const page = Number(req.query.page) || 1;
+    const limit = Number(req.query.limit) || 20;
+
+    const skip = (page - 1) * limit;
+
+    const where = {
+      usuario: { activo: true },
+    };
+
+    const [totalRegistros, docentes] = await Promise.all([
+      prisma.docente.count({
+        where,
+      }),
+
+      prisma.docente.findMany({
+        where,
+
+        skip,
+        take: limit,
+
+        include: {
+          usuario: true,
+          especialidad: true,
+          clases: {
+            include: {
+              materias: true,
+              grupo: true,
+            },
           },
         },
-      },
-      orderBy: {
-        usuario: { nombre: "asc" },
-      },
-    });
+
+        orderBy: {
+          usuario: {
+            nombre: "asc",
+          },
+        },
+      }),
+    ]);
 
     const dataFormateada = docentes.map((d) => ({
       id: d.idDocente,
@@ -185,14 +205,29 @@ const getDocentes = async (req, res) => {
       email: d.usuario?.email || "N/A",
       curp: d.usuario?.curp || "N/A",
       telefono: d.usuario?.telefono || "N/A",
+
       numeroEmpleado: d.numeroEmpleado || "N/A",
+
       especialidad: d.especialidad?.nombre || "Sin Asignar",
+
       fechaContratacion: d.fechaContratacion,
+
       activo: d.usuario?.activo ?? true,
     }));
 
-    res.json(dataFormateada);
+    res.json({
+      data: dataFormateada,
+
+      pagination: {
+        totalRegistros,
+        totalPages: Math.ceil(totalRegistros / limit),
+        currentPage: page,
+        limit,
+      },
+    });
   } catch (error) {
+    console.error("Error getDocentes:", error);
+
     res.status(500).json({
       ok: false,
       error:
@@ -200,7 +235,6 @@ const getDocentes = async (req, res) => {
     });
   }
 };
-
 const cargarDocentesMasivos = async (req, res) => {
   try {
     if (!req.file) {
