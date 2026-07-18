@@ -29,7 +29,7 @@ router.use("/clases", require("./claseRoute"));
 router.use("/periodos", require("./periodosRouter"));
 router.use("/especialidades", require("./especialidadRoute"));
 router.use("/espacios", require("./espaciosRoute"));
-router.use("/dashboard", require(".dashboardRoute"));
+router.use("/dashboard", require("./dashboardRoute"));
 
 // Gestión Diaria
 
