@@ -182,6 +182,7 @@ const getEstudiantes = async (req, res) => {
         include: {
           usuario: {
             select: {
+              idUsuario: true,
               nombre: true,
               apellidoPaterno: true,
               apellidoMaterno: true,
@@ -196,10 +197,16 @@ const getEstudiantes = async (req, res) => {
           },
           grupo: {
             select: {
+              idGrupo: true,
               nombre: true,
               grado: true,
               turno: true,
-              especialidad: true,
+              especialidad: {
+                select: {
+                  idEspecialidad: true,
+                  nombre: true,
+                },
+              },
             },
           },
           tutor: true,
