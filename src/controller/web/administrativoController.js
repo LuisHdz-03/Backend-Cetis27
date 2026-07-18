@@ -237,57 +237,94 @@ const crearAdministrativo = async (req, res) => {
 
 const getAdministrativos = async (req, res) => {
   try {
-    const admins = await prisma.administrativo.findMany({
-      where: {
-        usuario: {
-          activo: true,
-        },
+    const page = Number(req.query.page) || 1;
+    const limit = Number(req.query.limit) || 20;
+
+    const skip = (page - 1) * limit;
+
+    const where = {
+      usuario: {
+        activo: true,
       },
-      include: {
-        usuario: {
-          select: {
-            nombre: true,
-            apellidoPaterno: true,
-            apellidoMaterno: true,
-            username: true,
-            email: true,
-            curp: true,
-            telefono: true,
-            fechaNacimiento: true,
-            rol: true,
-            activo: true,
+    };
+
+    const [totalRegistros, admins] = await Promise.all([
+      prisma.administrativo.count({
+        where,
+      }),
+
+      prisma.administrativo.findMany({
+        where,
+
+        skip,
+        take: limit,
+
+        include: {
+          usuario: {
+            select: {
+              nombre: true,
+              apellidoPaterno: true,
+              apellidoMaterno: true,
+              username: true,
+              email: true,
+              curp: true,
+              telefono: true,
+              fechaNacimiento: true,
+              rol: true,
+              activo: true,
+            },
           },
         },
-      },
-      orderBy: {
-        usuario: {
-          nombre: "asc",
+
+        orderBy: {
+          usuario: {
+            nombre: "asc",
+          },
         },
-      },
-    });
+      }),
+    ]);
 
     const dataFormateada = admins.map((a) => ({
       id: a.idAdministrativo,
+
       nombre: a.usuario.nombre,
       apellidoPaterno: a.usuario.apellidoPaterno,
       apellidoMaterno: a.usuario.apellidoMaterno,
+
       username: a.usuario.username,
       telefono: a.usuario.telefono,
       curp: a.usuario.curp,
       email: a.usuario.email,
+
       cargo: cargoParaMostrar[a.cargo] || a.cargo,
+
       area: a.area,
+
       numeroEmpleado: a.numeroEmpleado,
+
       rol: a.usuario.rol,
+
       activo: a.usuario.activo,
     }));
 
-    res.json(dataFormateada);
+    res.json({
+      data: dataFormateada,
+
+      pagination: {
+        totalRegistros,
+        totalPages: Math.ceil(totalRegistros / limit),
+        currentPage: page,
+        limit,
+      },
+    });
   } catch (error) {
-    res.status(500).json({ error: "Error al obtener lista." });
+    console.error("Error getAdministrativos:", error);
+
+    res.status(500).json({
+      error: "Error al obtener lista.",
+    });
   }
 };
-
 const cargarAdministrativosMasivos = async (req, res) => {
   try {
     if (!req.file) {
