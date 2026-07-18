@@ -44,20 +44,49 @@ const extractTokenFromRequest = (req) => {
   return null;
 };
 
+const verifyJwtFromRequest = (req, res) => {
+  const token = extractTokenFromRequest(req);
+
+  if (!token) {
+    res.status(401).json({ error: "No se proporcionó un token de acceso." });
+    return null;
+  }
+
+  try {
+    return jwt.verify(token, getJwtSecret());
+  } catch (err) {
+    if (err.name === "TokenExpiredError") {
+      res.status(401).json({
+        code: "SESSION_EXPIRED",
+        error: "Tu sesión ha expirado. Ingresa de nuevo.",
+      });
+      return null;
+    }
+
+    if (err.name === "JsonWebTokenError") {
+      res.status(401).json({
+        code: "INVALID_TOKEN",
+        error: "Token de seguridad inválido.",
+      });
+      return null;
+    }
+
+    res
+      .status(500)
+      .json({ error: "Error de conexión con el servidor de seguridad." });
+    return null;
+  }
+};
+
 /**
  * Middleware principal de autenticación
  */
 const verificarToken = async (req, res, next) => {
-  const token = extractTokenFromRequest(req);
-
-  if (!token) {
-    return res
-      .status(401)
-      .json({ error: "No se proporcionó un token de acceso." });
-  }
-
   try {
-    const decoded = jwt.verify(token, getJwtSecret());
+    const decoded = verifyJwtFromRequest(req, res);
+    if (!decoded) {
+      return;
+    }
 
     const userId = parseInt(decoded.id, 10);
     if (isNaN(userId)) {
@@ -106,21 +135,67 @@ const verificarToken = async (req, res, next) => {
 
     next();
   } catch (err) {
-    if (err.name === "TokenExpiredError") {
-      return res
-        .status(401)
-        .json({
-          code: "SESSION_EXPIRED",
-          error: "Tu sesión ha expirado. Ingresa de nuevo.",
-        });
+    return res
+      .status(500)
+      .json({ error: "Error de conexión con el servidor de seguridad." });
+  }
+};
+
+const verificarTokenPadre = async (req, res, next) => {
+  try {
+    const decoded = verifyJwtFromRequest(req, res);
+    if (!decoded) {
+      return;
     }
-    if (err.name === "JsonWebTokenError") {
-      return res.status(401).json({
-        code: "INVALID_TOKEN",
-        error: "Token de seguridad inválido.",
+
+    if (String(decoded.rol || "").toUpperCase() !== "PADRE") {
+      return res.status(403).json({
+        error: "Este recurso solo está disponible para sesiones de padres.",
       });
     }
 
+    const idEstudiante = parseInt(decoded.idEstudiante, 10);
+    if (isNaN(idEstudiante)) {
+      return res.status(401).json({
+        error: "Token malformado: ID de estudiante inválido.",
+      });
+    }
+
+    const estudianteActual = await prisma.estudiante.findUnique({
+      where: { idEstudiante },
+      select: {
+        idEstudiante: true,
+        usuarioId: true,
+        usuario: {
+          select: {
+            activo: true,
+            nombre: true,
+          },
+        },
+      },
+    });
+
+    if (!estudianteActual) {
+      return res.status(401).json({
+        error: "El estudiante vinculado a esta sesión ya no existe.",
+      });
+    }
+
+    if (!estudianteActual.usuario?.activo) {
+      return res.status(403).json({
+        error: "La cuenta vinculada a esta sesión ha sido desactivada.",
+      });
+    }
+
+    req.usuario = {
+      rol: "PADRE",
+      idEstudiante: estudianteActual.idEstudiante,
+      nombre: estudianteActual.usuario.nombre,
+      activo: estudianteActual.usuario.activo,
+    };
+
+    next();
+  } catch (err) {
     return res
       .status(500)
       .json({ error: "Error de conexión con el servidor de seguridad." });
@@ -163,6 +238,7 @@ const accesoEspecialidades = verificarRol(
 
 module.exports = {
   verificarToken,
+  verificarTokenPadre,
   verificarRol,
   soloDocente,
   soloAlumno,

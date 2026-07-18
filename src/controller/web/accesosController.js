@@ -13,6 +13,14 @@ const limpiarQrProcesadosExpirados = (ahora) => {
   }
 };
 
+const esMismoDia = (fechaA, fechaB) => {
+  return (
+    fechaA.getFullYear() === fechaB.getFullYear() &&
+    fechaA.getMonth() === fechaB.getMonth() &&
+    fechaA.getDate() === fechaB.getDate()
+  );
+};
+
 const registrarAcceso = async (req, res) => {
   try {
     const tokenQR = String(req.body?.tokenQR || "").trim();
@@ -42,7 +50,10 @@ const registrarAcceso = async (req, res) => {
     }
 
     const qrProcesado = qrProcesadosRecientemente.get(tokenQR);
-    if (qrProcesado && ahora - qrProcesado.procesadoEn < VENTANA_BLOQUEO_QR_MS) {
+    if (
+      qrProcesado &&
+      ahora - qrProcesado.procesadoEn < VENTANA_BLOQUEO_QR_MS
+    ) {
       return res.json({
         ...qrProcesado.respuesta,
         duplicado: true,
@@ -66,41 +77,42 @@ const registrarAcceso = async (req, res) => {
       return res.status(404).json({ mensaje: "Matricula no encontrada" });
     }
 
-    const ultimoAcceso = await prisma.accesos.findFirst({
-      where: { alumnoId: alumno.idEstudiante },
-      orderBy: { fechaHora: "desc" },
-    });
+    const nuevoRegistro = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(${alumno.idEstudiante})`;
 
-    let nuevoTipo = "ENTRADA";
+      const ultimoAcceso = await tx.accesos.findFirst({
+        where: { alumnoId: alumno.idEstudiante },
+        orderBy: { fechaHora: "desc" },
+      });
 
-    if (ultimoAcceso) {
-      const fechaUltimo = new Date(ultimoAcceso.fechaHora);
-      const fechaActual = new Date();
-      const esMismoDia =
-        fechaUltimo.toDateString() === fechaActual.toDateString();
+      let nuevoTipo = "ENTRADA";
 
-      if (esMismoDia) {
-        if (ultimoAcceso.tipo === "ENTRADA") {
+      if (ultimoAcceso) {
+        const fechaUltimo = new Date(ultimoAcceso.fechaHora);
+        const fechaActual = new Date();
+
+        if (
+          esMismoDia(fechaUltimo, fechaActual) &&
+          ultimoAcceso.tipo === "ENTRADA"
+        ) {
           nuevoTipo = "SALIDA";
         }
-      } else {
-        nuevoTipo = "ENTRADA";
       }
-    }
 
-    const nuevoRegistro = await prisma.accesos.create({
-      data: {
-        tipo: nuevoTipo,
-        alumnoId: alumno.idEstudiante,
-      },
+      return tx.accesos.create({
+        data: {
+          tipo: nuevoTipo,
+          alumnoId: alumno.idEstudiante,
+        },
+      });
     });
 
     const respuesta = {
-      mensaje: `Registro exitoso: ${nuevoTipo}`,
-      tipo: nuevoTipo,
+      mensaje: `Registro exitoso: ${nuevoRegistro.tipo}`,
+      tipo: nuevoRegistro.tipo,
       alumno: `${alumno.usuario.nombre} ${alumno.usuario.apellidoPaterno}`,
       matricula: matricula,
-      hora: new Date(),
+      hora: nuevoRegistro.fechaHora,
     };
 
     qrProcesadosRecientemente.set(tokenQR, {
@@ -117,31 +129,68 @@ const registrarAcceso = async (req, res) => {
 
 const getAccesos = async (req, res) => {
   try {
-    const accesos = await prisma.accesos.findMany({
-      include: {
-        alumno: {
-          select: {
-            matricula: true,
-            usuario: {
-              select: {
-                nombre: true,
-                apellidoPaterno: true,
-                apellidoMaterno: true,
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const skip = (page - 1) * limit;
+
+    const { fecha, matricula } = req.query;
+    const where = {};
+
+    if (matricula) {
+      where.alumno = { matricula: matricula };
+    }
+
+    if (fecha) {
+      const startOfDay = new Date(fecha);
+      startOfDay.setUTCHours(0, 0, 0, 0);
+
+      const endOfDay = new Date(fecha);
+      endOfDay.setUTCHours(23, 59, 59, 999);
+
+      where.fechaHora = {
+        gte: startOfDay,
+        lte: endOfDay,
+      };
+    }
+
+    const [accesos, totalRegistros] = await Promise.all([
+      prisma.accesos.findMany({
+        where,
+        skip,
+        take: limit,
+        include: {
+          alumno: {
+            select: {
+              matricula: true,
+              usuario: {
+                select: {
+                  nombre: true,
+                  apellidoPaterno: true,
+                  apellidoMaterno: true,
+                },
               },
-            },
-            grupo: {
-              select: {
-                nombre: true,
+              grupo: {
+                select: { nombre: true },
               },
             },
           },
         },
-      },
-      orderBy: {
-        fechaHora: "desc",
+        orderBy: {
+          fechaHora: "desc",
+        },
+      }),
+      prisma.accesos.count({ where }),
+    ]);
+
+    res.json({
+      data: accesos,
+      pagination: {
+        totalRegistros,
+        totalPages: Math.ceil(totalRegistros / limit),
+        currentPage: page,
+        limit,
       },
     });
-    res.json(accesos);
   } catch (error) {
     res.status(500).json({ mensaje: "Error al obtener los accesos" });
   }

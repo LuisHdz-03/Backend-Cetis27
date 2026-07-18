@@ -50,6 +50,19 @@ const formatearEspacioSalida = (espacio = {}) => ({
   tipo: formatearTipoSalida(espacio.tipo),
 });
 
+const parseBooleanInput = (value) => {
+  if (typeof value === "boolean") return value;
+
+  const normalizedValue = String(value || "")
+    .trim()
+    .toLowerCase();
+
+  if (["true", "1", "si", "sí"].includes(normalizedValue)) return true;
+  if (["false", "0", "no"].includes(normalizedValue)) return false;
+
+  return null;
+};
+
 const crearEspacio = async (req, res) => {
   try {
     const { nombre, tipo, descripcion } = req.body;
@@ -102,9 +115,7 @@ const getEspacios = async (req, res) => {
     if (tipo) {
       const tipoNormalizado = mapearTipoEspacio(tipo);
       if (!tipoNormalizado) {
-        return res
-          .status(400)
-          .json({ error: "tipo inválido" });
+        return res.status(400).json({ error: "tipo inválido" });
       }
       where.tipo = tipoNormalizado;
     }
@@ -135,7 +146,15 @@ const actualizarEspacio = async (req, res) => {
     if (descripcion !== undefined) {
       data.descripcion = descripcion ? String(descripcion).trim() : null;
     }
-    if (activo !== undefined) data.activo = Boolean(activo);
+    if (activo !== undefined) {
+      const activoNormalizado = parseBooleanInput(activo);
+      if (activoNormalizado === null) {
+        return res.status(400).json({
+          error: "El campo activo debe ser booleano.",
+        });
+      }
+      data.activo = activoNormalizado;
+    }
 
     if (tipo !== undefined) {
       const tipoNormalizado = mapearTipoEspacio(tipo);
@@ -214,17 +233,30 @@ const cargarEspaciosMasivos = async (req, res) => {
     const errores = [];
     const procesados = [];
 
+    const todosLosEspacios = await prisma.espacio.findMany({
+      select: { idEspacio: true, nombre: true },
+    });
+
+    const espaciosMap = new Map();
+    todosLosEspacios.forEach((espacio) => {
+      espaciosMap.set(
+        String(espacio.nombre).trim().toUpperCase(),
+        espacio.idEspacio,
+      );
+    });
+
     for (let i = 0; i < datosExcel.length; i++) {
       const fila = datosExcel[i];
-      const numeroFila = i + 2; // +2 por cabecera de Excel
+      const numeroFila = i + 2;
 
-      const nombre = String(fila["NOMBRE"] || "").trim();
+      const nombreRaw = String(fila["NOMBRE"] || "").trim();
+      const nombreNorm = nombreRaw.toUpperCase();
       const tipoEntrada = fila["TIPO"];
       const tipo = mapearTipoEspacio(tipoEntrada);
       const descripcionRaw = fila["DESCRIPCION"];
       const descripcion = descripcionRaw ? String(descripcionRaw).trim() : null;
 
-      if (!nombre || !tipo) {
+      if (!nombreRaw || !tipo) {
         errores.push({
           fila: numeroFila,
           error: "NOMBRE y TIPO son obligatorios",
@@ -241,14 +273,11 @@ const cargarEspaciosMasivos = async (req, res) => {
       }
 
       try {
-        const existente = await prisma.espacio.findFirst({
-          where: { nombre },
-          select: { idEspacio: true },
-        });
+        const idEspacioExistente = espaciosMap.get(nombreNorm);
 
-        if (existente) {
+        if (idEspacioExistente) {
           await prisma.espacio.update({
-            where: { idEspacio: existente.idEspacio },
+            where: { idEspacio: idEspacioExistente },
             data: {
               tipo,
               descripcion,
@@ -256,17 +285,18 @@ const cargarEspaciosMasivos = async (req, res) => {
             },
           });
 
-          procesados.push({ nombre, accion: "actualizado" });
+          procesados.push({ nombre: nombreRaw, accion: "actualizado" });
         } else {
-          await prisma.espacio.create({
+          const nuevoEspacio = await prisma.espacio.create({
             data: {
-              nombre,
+              nombre: nombreRaw,
               tipo,
               descripcion,
             },
           });
 
-          procesados.push({ nombre, accion: "creado" });
+          espaciosMap.set(nombreNorm, nuevoEspacio.idEspacio);
+          procesados.push({ nombre: nombreRaw, accion: "creado" });
         }
       } catch (error) {
         errores.push({

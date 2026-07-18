@@ -1,6 +1,8 @@
 const { Router } = require("express");
 const router = Router();
 
+const { verificarTokenPadre } = require("../../middlewares/authMiddleware");
+
 const {
   parentAccessLimiter,
 } = require("../../middlewares/rateLimitMiddleware");
@@ -10,17 +12,20 @@ const {
 const {
   consultarEstatusCompletoEstudiante,
 } = require("../../controller/movil/estatusEstudianteController");
-const { loginPadre, grupoEstudiante } = require("../../controller/web/padresController");
+const {
+  loginPadre,
+  grupoEstudiante,
+} = require("../../controller/web/padresController");
 
 router.get(
   "/estatus-completo/:idEstudiante",
+  verificarTokenPadre,
   consultarEstatusCompletoEstudiante,
 );
-
 
 router.post("/login", loginPadre);
 
 // Ruta para consultar solo el grupo del estudiante
-router.get("/grupo/:idEstudiante", grupoEstudiante);
+router.get("/grupo/:idEstudiante", verificarTokenPadre, grupoEstudiante);
 
 module.exports = router;

@@ -1,23 +1,87 @@
 const prisma = require("../../config/prisma");
 
+const parseBooleanInput = (value, defaultValue = undefined) => {
+  if (value === undefined) return defaultValue;
+  if (typeof value === "boolean") return value;
+
+  const normalizedValue = String(value).trim().toLowerCase();
+  if (["true", "1", "si", "sí"].includes(normalizedValue)) return true;
+  if (["false", "0", "no"].includes(normalizedValue)) return false;
+
+  return null;
+};
+
+const parseFecha = (value) => {
+  const fecha = new Date(value);
+  return Number.isNaN(fecha.getTime()) ? null : fecha;
+};
+
+const actualizarNombreGrupoPromovido = (nombreGrupo, gradoActual) => {
+  const nombre = String(nombreGrupo || "").trim();
+  const gradoSiguiente = Number(gradoActual) + 1;
+  const patronInicio = new RegExp(`^${gradoActual}(?=\\D|$)`);
+
+  if (!nombre) {
+    return nombre;
+  }
+
+  if (patronInicio.test(nombre)) {
+    return nombre.replace(patronInicio, String(gradoSiguiente));
+  }
+
+  return nombre;
+};
+
 const crearPeriodo = async (req, res) => {
   try {
     const { nombre, codigo, fechaInicio, fechaFin, activo } = req.body;
-    const seraActivo = activo !== undefined ? activo : true;
+    const nombreNormalizado = String(nombre || "").trim();
+    const fechaInicioDate = parseFecha(fechaInicio);
+    const fechaFinDate = parseFecha(fechaFin);
+    const seraActivo = parseBooleanInput(activo, true);
 
-    if (seraActivo) {
-      await prisma.periodo.updateMany({
-        data: { activo: false },
-      });
+    if (!nombreNormalizado) {
+      return res
+        .status(400)
+        .json({ error: "El nombre del periodo es obligatorio." });
     }
-    const nuevoPeriodo = await prisma.periodo.create({
-      data: {
-        nombre,
-        codigo: codigo || nombre.substring(0, 4).toUpperCase(),
-        fechaInicio: new Date(fechaInicio),
-        fechaFin: new Date(fechaFin),
-        activo: seraActivo,
-      },
+
+    if (!fechaInicioDate || !fechaFinDate) {
+      return res
+        .status(400)
+        .json({ error: "Las fechas del periodo son inválidas." });
+    }
+
+    if (fechaInicioDate >= fechaFinDate) {
+      return res
+        .status(400)
+        .json({
+          error: "La fecha de inicio debe ser menor a la fecha de fin.",
+        });
+    }
+
+    if (seraActivo === null) {
+      return res
+        .status(400)
+        .json({ error: "El campo activo debe ser booleano." });
+    }
+
+    const nuevoPeriodo = await prisma.$transaction(async (tx) => {
+      if (seraActivo) {
+        await tx.periodo.updateMany({
+          data: { activo: false },
+        });
+      }
+
+      return tx.periodo.create({
+        data: {
+          nombre: nombreNormalizado,
+          codigo: codigo || nombreNormalizado.substring(0, 4).toUpperCase(),
+          fechaInicio: fechaInicioDate,
+          fechaFin: fechaFinDate,
+          activo: seraActivo,
+        },
+      });
     });
 
     res.status(201).json(nuevoPeriodo);
@@ -94,23 +158,14 @@ const cerrarPeriodoYPromover = async (req, res) => {
   try {
     await prisma.$transaction(async (tx) => {
       await tx.periodo.update({
-        where: { idPeriodo: idPeriodo },
+        where: { idPeriodo },
         data: { activo: false },
       });
 
-      const estudiantesSexto = await tx.estudiante.findMany({
-        where: { semestre: 6 },
-        select: { usuarioId: true },
+      await tx.usuario.updateMany({
+        where: { estudiante: { semestre: 6 } },
+        data: { activo: false },
       });
-
-      const idsUsuariosSexto = estudiantesSexto.map((e) => e.usuarioId);
-
-      if (idsUsuariosSexto.length > 0) {
-        await tx.usuario.updateMany({
-          where: { idUsuario: { in: idsUsuariosSexto } },
-          data: { activo: false },
-        });
-      }
 
       await tx.estudiante.updateMany({
         where: {
@@ -128,32 +183,30 @@ const cerrarPeriodoYPromover = async (req, res) => {
       });
 
       const gruposPromover = await tx.grupo.findMany({
-        where: {
-          grado: { lt: 6 },
-        },
+        where: { grado: { lt: 6 }, activo: true },
+        select: { idGrupo: true, nombre: true, grado: true },
       });
 
-      for (const grupo of gruposPromover) {
-        const nuevoNombre = grupo.nombre.replace(
-          /\d+/,
-          (match) => parseInt(match) + 1,
-        );
+      await Promise.all(
+        gruposPromover.map((grupo) => {
+          const nuevoNombre = actualizarNombreGrupoPromovido(
+            grupo.nombre,
+            grupo.grado,
+          );
 
-        await tx.grupo.update({
-          where: { idGrupo: grupo.idGrupo },
-          data: {
-            grado: { increment: 1 },
-            nombre: nuevoNombre,
-          },
-        });
-      }
+          return tx.grupo.update({
+            where: { idGrupo: grupo.idGrupo },
+            data: { grado: { increment: 1 }, nombre: nuevoNombre },
+          });
+        }),
+      );
     });
 
     res.status(200).json({
-      mensaje:
-        "Periodo cerrado correctamente. Estudiantes promovidos y grupos actualizados al siguiente semestre.",
+      mensaje: "Periodo cerrado. Estudiantes promovidos y grupos actualizados.",
     });
   } catch (error) {
+    console.error("Error al cerrar periodo:", error);
     res.status(500).json({ error: "Error interno al cerrar el periodo." });
   }
 };

@@ -9,7 +9,14 @@
     "start:prod": "node src/server.js",
     "prisma:validate": "prisma validate",
     "audit:prod": "npm audit --omit=dev",
-    "check": "npm run prisma:validate"
+    "check": "npm run prisma:validate",
+    "load:login-movil": "artillery run artillery/login-movil.yml",
+    "load:login-web": "artillery run artillery/login-web.yml",
+    "load:login-mixto": "artillery run artillery/login-mixto.yml",
+    "load:flujo-entrada": "artillery run artillery/flujo-login-entrada.yml",
+    "load:flujo-entrada-sin-login": "artillery run artillery/entrada-qr-sin-login.yml",
+    "load:pase-lista": "artillery run artillery/pase-lista.yml",
+    "load:pase-lista-sin-login": "artillery run artillery/pase-lista-sin-login.yml"
   },
   "keywords": [],
   "author": "",
@@ -33,6 +40,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "artillery": "^2.0.33",
     "nodemon": "^3.1.11",
     "prisma": "^5.22.0"
   }

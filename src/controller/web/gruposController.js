@@ -91,60 +91,76 @@ const crearGrupo = async (req, res) => {
 
 const getGrupos = async (req, res) => {
   try {
-    const grupos = await prisma.grupo.findMany({
-      where: {
-        activo: true,
-      },
-      include: {
-        especialidad: {
-          select: { nombre: true, codigo: true },
-        },
-        docenteTutor: {
-          include: {
-            usuario: {
-              select: {
-                nombre: true,
-                apellidoPaterno: true,
-                apellidoMaterno: true,
-                username: true,
-              },
-            },
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 100;
+    const skip = (page - 1) * limit;
+
+    const where = { activo: true };
+
+    const [grupos, totalRegistros] = await Promise.all([
+      prisma.grupo.findMany({
+        where,
+        skip,
+        take: limit,
+        include: {
+          especialidad: {
+            select: { nombre: true, codigo: true },
           },
-        },
-        clases: {
-          where: { periodo: { activo: true } },
-          include: {
-            materias: {
-              include: {
-                espacio: {
-                  select: {
-                    idEspacio: true,
-                    nombre: true,
-                    tipo: true,
-                    activo: true,
-                  },
+          docenteTutor: {
+            include: {
+              usuario: {
+                select: {
+                  nombre: true,
+                  apellidoPaterno: true,
+                  apellidoMaterno: true,
+                  username: true,
                 },
               },
             },
-            docente: {
-              include: {
-                usuario: { select: { nombre: true, apellidoPaterno: true } },
+          },
+          clases: {
+            where: { periodo: { activo: true } },
+            include: {
+              materias: {
+                include: {
+                  espacio: {
+                    select: {
+                      idEspacio: true,
+                      nombre: true,
+                      tipo: true,
+                      activo: true,
+                    },
+                  },
+                },
+              },
+              docente: {
+                include: {
+                  usuario: { select: { nombre: true, apellidoPaterno: true } },
+                },
+              },
+              periodo: {
+                select: { nombre: true, activo: true },
               },
             },
-            periodo: {
-              select: { nombre: true, activo: true },
-            },
+          },
+          _count: {
+            select: { estudiantes: true },
           },
         },
-        _count: {
-          select: { estudiantes: true },
-        },
-      },
-      orderBy: {
-        grado: "asc",
-      },
+        orderBy: { grado: "asc" },
+      }),
+      prisma.grupo.count({ where })
+    ]);
+
+    res.json({
+      data: grupos,
+      pagination: {
+        totalRegistros,
+        totalPages: Math.ceil(totalRegistros / limit),
+        currentPage: page,
+        limit
+      }
     });
-    res.json(grupos);
   } catch (error) {
     res.status(500).json({ error: "Error al obtener grupos" });
   }
@@ -362,114 +378,80 @@ const cargarGruposMasivos = async (req, res) => {
 
     const errores = [];
     const datosInsertados = [];
-
     const turnosValidos = ["MATUTINO", "VESPERTINO", "MIXTO"];
+
+    // 1. Aulas activas
+    const espacios = await prisma.espacio.findMany({ where: { activo: true }, select: { nombre: true } });
+    const aulasSet = new Set(espacios.map(e => String(e.nombre).trim().toUpperCase()));
+
+    // 2. Especialidades
+    const especialidades = await prisma.especialidad.findMany({ select: { idEspecialidad: true, nombre: true } });
+    const especialidadesMap = new Map(especialidades.map(e => [String(e.nombre).trim().toUpperCase(), e.idEspecialidad]));
+
+    // 3. Docentes
+    const docentes = await prisma.docente.findMany({ select: { idDocente: true, numeroEmpleado: true } });
+    const docentesMap = new Map(docentes.map(d => [String(d.numeroEmpleado).trim().toUpperCase(), d.idDocente]));
+
+    // 4. Grupos existentes 
+    const gruposExistentes = await prisma.grupo.findMany({ select: { idGrupo: true, nombre: true, grado: true, especialidadId: true, turno: true, aula: true, docenteTutorId: true } });
+
 
     for (const fila of datosExcel) {
       const nombre = getExcelValue(fila, ["NOMBRE", "GRUPO"]);
       const grado = getExcelValue(fila, ["GRADO", "SEMESTRE"]);
       const turno = getExcelValue(fila, ["TURNO"]);
       const aula = getExcelValue(fila, ["AULA", "ESPACIO"]);
-      const especialidadNombre = getExcelValue(fila, [
-        "ESPECIALIDAD",
-        "CARRERA",
-      ]);
-      const docenteTutorNumEmpleado = getExcelValue(fila, [
-        "DOCENTE TUTOR",
-        "DOCENTE_TUTOR_NUM_EMPLEADO",
-        "DOCENTE_TUTOR",
-        "DOCENTE_TUTOR_NUMERO_EMPLEADO",
-      ]);
+      const especialidadNombre = getExcelValue(fila, ["ESPECIALIDAD", "CARRERA"]);
+      const docenteTutorNumEmpleado = getExcelValue(fila, ["DOCENTE TUTOR", "DOCENTE_TUTOR_NUM_EMPLEADO", "DOCENTE_TUTOR", "DOCENTE_TUTOR_NUMERO_EMPLEADO"]);
 
       if (!nombre || !grado || !turno || !especialidadNombre) {
-        errores.push({
-          registro: nombre || "Desconocido",
-          error: "Faltan columnas (NOMBRE, GRADO, TURNO o ESPECIALIDAD)",
-        });
+        errores.push({ registro: nombre || "Desconocido", error: "Faltan columnas (NOMBRE, GRADO, TURNO o ESPECIALIDAD)" });
         continue;
       }
 
       if (!docenteTutorNumEmpleado) {
-        errores.push({
-          registro: nombre || "Desconocido",
-          error: "Falta la columna DOCENTE TUTOR (obligatoria)",
-        });
+        errores.push({ registro: nombre || "Desconocido", error: "Falta la columna DOCENTE TUTOR (obligatoria)" });
         continue;
       }
 
       const turnoNormalizado = String(turno).trim().toUpperCase();
       if (!turnosValidos.includes(turnoNormalizado)) {
-        errores.push({
-          registro: nombre,
-          error: `Turno inválido: ${turno}. Debe ser MATUTINO, VESPERTINO o MIXTO`,
-        });
+        errores.push({ registro: nombre, error: `Turno inválido: ${turno}. Debe ser MATUTINO, VESPERTINO o MIXTO` });
         continue;
       }
 
       if (aula) {
-        const aulaValida = await validarAulaEnCatalogo(aula);
-        if (!aulaValida) {
-          errores.push({
-            registro: nombre,
-            error: `El aula/espacio '${aula}' no existe en el catálogo activo`,
-          });
+        if (!aulasSet.has(String(aula).trim().toUpperCase())) {
+          errores.push({ registro: nombre, error: `El aula/espacio '${aula}' no existe en el catálogo activo` });
           continue;
         }
       }
 
+      const idEspecialidad = especialidadesMap.get(String(especialidadNombre).trim().toUpperCase());
+      if (!idEspecialidad) {
+        errores.push({ registro: nombre, error: `La especialidad "${especialidadNombre}" no existe` });
+        continue;
+      }
+
+      const idDocenteTutor = docentesMap.get(String(docenteTutorNumEmpleado).trim().toUpperCase());
+      if (!idDocenteTutor) {
+        errores.push({ registro: nombre, error: `No existe docente tutor con número de empleado '${docenteTutorNumEmpleado}'` });
+        continue;
+      }
+
       try {
-        const especialidadExiste = await prisma.especialidad.findFirst({
-          where: {
-            nombre: {
-              equals: String(especialidadNombre).trim(),
-              mode: "insensitive",
-            },
-          },
-        });
-
-        if (!especialidadExiste) {
-          errores.push({
-            registro: nombre,
-            error: `La especialidad "${especialidadNombre}" no existe`,
-          });
-          continue;
-        }
-
-        const docenteTutorExiste = await prisma.docente.findFirst({
-          where: {
-            numeroEmpleado: {
-              equals: String(docenteTutorNumEmpleado).trim(),
-              mode: "insensitive",
-            },
-          },
-          select: { idDocente: true },
-        });
-
-        if (!docenteTutorExiste) {
-          errores.push({
-            registro: nombre,
-            error: `No existe docente tutor con número de empleado '${docenteTutorNumEmpleado}'`,
-          });
-          continue;
-        }
-
-        // Buscamos sin periodoId
-        const grupoExistente = await prisma.grupo.findFirst({
-          where: {
-            nombre: String(nombre).trim(),
-            grado: parseInt(grado),
-            especialidadId: especialidadExiste.idEspecialidad,
-          },
-        });
+        const gradoInt = parseInt(grado);
+        const grupoExistente = gruposExistentes.find(g => 
+          g.nombre === String(nombre).trim() && 
+          g.grado === gradoInt && 
+          g.especialidadId === idEspecialidad
+        );
 
         if (grupoExistente) {
           const grupoUpdate = {};
-          if (turnoNormalizado !== grupoExistente.turno)
-            grupoUpdate.turno = turnoNormalizado;
-          if ((aula ? String(aula).trim() : null) !== grupoExistente.aula)
-            grupoUpdate.aula = aula ? String(aula).trim() : null;
-          if (grupoExistente.docenteTutorId !== docenteTutorExiste.idDocente)
-            grupoUpdate.docenteTutorId = docenteTutorExiste.idDocente;
+          if (turnoNormalizado !== grupoExistente.turno) grupoUpdate.turno = turnoNormalizado;
+          if ((aula ? String(aula).trim() : null) !== grupoExistente.aula) grupoUpdate.aula = aula ? String(aula).trim() : null;
+          if (grupoExistente.docenteTutorId !== idDocenteTutor) grupoUpdate.docenteTutorId = idDocenteTutor;
 
           if (Object.keys(grupoUpdate).length > 0) {
             await prisma.grupo.update({
@@ -479,17 +461,17 @@ const cargarGruposMasivos = async (req, res) => {
           }
           datosInsertados.push(nombre);
         } else {
-          const nuevoGrupo = await prisma.grupo.create({
+          await prisma.grupo.create({
             data: {
               nombre: String(nombre).trim(),
-              grado: parseInt(grado),
+              grado: gradoInt,
               turno: turnoNormalizado,
               aula: aula ? String(aula).trim() : null,
-              especialidadId: especialidadExiste.idEspecialidad,
-              docenteTutorId: docenteTutorExiste.idDocente,
+              especialidadId: idEspecialidad,
+              docenteTutorId: idDocenteTutor,
             },
           });
-          datosInsertados.push(nuevoGrupo.nombre);
+          datosInsertados.push(String(nombre).trim());
         }
       } catch (error) {
         errores.push({
@@ -502,10 +484,7 @@ const cargarGruposMasivos = async (req, res) => {
     res.json({
       ok: true,
       mensaje: "Carga masiva finalizada",
-      resultadoProcesamiento: buildBulkProcessingMessage(
-        datosInsertados.length,
-        errores.length,
-      ),
+      resultadoProcesamiento: buildBulkProcessingMessage(datosInsertados.length, errores.length),
       insertados: datosInsertados.length,
       fallidos: errores.length,
       detalles: errores,

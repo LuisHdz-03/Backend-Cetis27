@@ -21,16 +21,29 @@ const SESSION_DURATION_SECONDS = {
   MOVIL: 7 * 24 * 60 * 60,
 };
 
+const PLATFORMS = new Set(Object.keys(SESSION_DURATION_SECONDS));
+const MENSAJE_CREDENCIALES_INVALIDAS = "Credenciales inválidas.";
+
 const login = async (req, res) => {
   try {
     const { username, password, plataforma } = req.body;
     const usernameNormalizado = String(username || "").trim();
+    const plataformaNormalizada = String(plataforma || "")
+      .trim()
+      .toUpperCase();
 
-    if (!usernameNormalizado || !password || !plataforma) {
+    if (!usernameNormalizado || !password || !plataformaNormalizada) {
       return res
         .status(400)
         .json({ error: "Faltan credenciales o identificar plataforma." });
     }
+
+    if (!PLATFORMS.has(plataformaNormalizada)) {
+      return res.status(400).json({
+        error: "Plataforma inválida. Debe ser WEB o MOVIL.",
+      });
+    }
+
     const usuario = await prisma.usuario.findUnique({
       where: { username: usernameNormalizado },
       include: {
@@ -40,18 +53,18 @@ const login = async (req, res) => {
       },
     });
     if (!usuario) {
-      return res.status(404).json({ error: "Usuario no encontrado." });
+      return res.status(401).json({ error: MENSAJE_CREDENCIALES_INVALIDAS });
     }
 
     const passwordValida = await bcrypt.compare(password, usuario.password);
     if (!passwordValida) {
-      return res.status(401).json({ error: "Contraseña incorrecta." });
+      return res.status(401).json({ error: MENSAJE_CREDENCIALES_INVALIDAS });
     }
 
     if (!usuario.activo) {
       return res.status(403).json({ error: "Cuenta desactivada." });
     }
-    if (plataforma === "WEB") {
+    if (plataformaNormalizada === "WEB") {
       if (usuario.rol === "ALUMNO") {
         return res.status(403).json({
           error: "Acceso denegado: Los alumnos deben usar la App Móvil.",
@@ -59,7 +72,7 @@ const login = async (req, res) => {
       }
     }
 
-    if (plataforma === "MOVIL") {
+    if (plataformaNormalizada === "MOVIL") {
       if (usuario.rol === "ADMINISTRATIVO") {
         return res
           .status(403)
@@ -81,7 +94,7 @@ const login = async (req, res) => {
     }
 
     const duracionSesionSegundos =
-      SESSION_DURATION_SECONDS[plataforma] || SESSION_DURATION_SECONDS.WEB;
+      SESSION_DURATION_SECONDS[plataformaNormalizada];
 
     const token = jwt.sign(
       {
@@ -100,11 +113,11 @@ const login = async (req, res) => {
     await registrarAccionManual(
       usuario.idUsuario,
       "LOGIN",
-      `Inicio de sesión exitoso desde la plataforma ${plataforma}.`,
+      `Inicio de sesión exitoso desde la plataforma ${plataformaNormalizada}.`,
     );
 
     res.json({
-      mensaje: `Bienvenido a la plataforma ${plataforma}`,
+      mensaje: `Bienvenido a la plataforma ${plataformaNormalizada}`,
       token,
       session: {
         expiresIn: duracionSesionSegundos,
@@ -309,12 +322,7 @@ const solicitarRecuperacionPassword = async (req, res) => {
 
     // Si no se proporcionó email+CURP, informar al frontend que los necesita
     if (!emailNormalizado || !curpNormalizada) {
-      return res.status(200).json({
-        ok: false,
-        necesitaCorreo: true,
-        mensaje:
-          "Este usuario no tiene correo registrado. Proporciona tu correo y CURP para verificar tu identidad y continuar.",
-      });
+      return res.json({ ok: true, mensaje: mensajeGenerico });
     }
 
     // Validar formato de email
@@ -327,9 +335,7 @@ const solicitarRecuperacionPassword = async (req, res) => {
 
     // Verificar identidad con CURP
     if (!usuario.curp || usuario.curp.toUpperCase() !== curpNormalizada) {
-      return res.status(400).json({
-        error: "Los datos no coinciden con los registros del sistema",
-      });
+      return res.json({ ok: true, mensaje: mensajeGenerico });
     }
 
     // Verificar que el correo no esté en uso por otro usuario
@@ -340,9 +346,7 @@ const solicitarRecuperacionPassword = async (req, res) => {
       },
     });
     if (correoOcupado) {
-      return res.status(409).json({
-        error: "El correo ya está registrado en el sistema por otro usuario",
-      });
+      return res.json({ ok: true, mensaje: mensajeGenerico });
     }
 
     // Registrar el correo en la cuenta del usuario

@@ -45,6 +45,9 @@ const extraerFechaPasswordDesdeCURP = (curp) => {
   }
 };
 
+const mensajeEntregaCredenciales =
+  "La contraseña inicial debe entregarse por un canal seguro fuera de esta respuesta.";
+
 // controladores
 
 const crearDocente = async (req, res) => {
@@ -63,11 +66,33 @@ const crearDocente = async (req, res) => {
       fechaContratacion,
     } = req.body;
 
+    if (!nombre || String(nombre).trim() === "") {
+      return res.status(400).json({ error: "El nombre es obligatorio" });
+    }
+
+    if (!numeroEmpleado || String(numeroEmpleado).trim() === "") {
+      return res
+        .status(400)
+        .json({ error: "El número de empleado es obligatorio" });
+    }
+
+    if (!curp || String(curp).trim() === "") {
+      return res.status(400).json({ error: "La CURP es obligatoria" });
+    }
+
     const numEmpleadoLimpio = limpiarMatricula(numeroEmpleado);
     const fechaNac = extraerFechaDesdeCURP(curp);
     const usernameGenerado = numEmpleadoLimpio;
     const emailNormalizado = email ? email.trim().toLowerCase() : null;
     const passwordInicial = extraerFechaPasswordDesdeCURP(curp);
+
+    if (!passwordInicial) {
+      return res.status(400).json({
+        ok: false,
+        error:
+          "No se pudo generar la contraseña inicial. Verifica que la CURP tenga el formato correcto.",
+      });
+    }
 
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(passwordInicial, salt);
@@ -110,9 +135,8 @@ const crearDocente = async (req, res) => {
       mensaje: "Docente registrado con éxito",
       credenciales: {
         username: resultado.usuario.username,
-        password_inicial: passwordInicial,
-        aviso:
-          "El usuario debe cambiar la contraseña en el primer inicio de sesión.",
+        requiereEntregaSegura: true,
+        aviso: mensajeEntregaCredenciales,
       },
       datos: {
         nombre: resultado.usuario.nombre,
@@ -134,6 +158,9 @@ const crearDocente = async (req, res) => {
 const getDocentes = async (req, res) => {
   try {
     const docentes = await prisma.docente.findMany({
+      where: {
+        usuario: { activo: true },
+      },
       include: {
         usuario: true,
         especialidad: true,
@@ -144,9 +171,11 @@ const getDocentes = async (req, res) => {
           },
         },
       },
+      orderBy: {
+        usuario: { nombre: "asc" },
+      },
     });
 
-    // Transformamos los datos para que el Frontend los reciba aplanados
     const dataFormateada = docentes.map((d) => ({
       id: d.idDocente,
       nombre: d.usuario?.nombre,
@@ -192,6 +221,17 @@ const cargarDocentesMasivos = async (req, res) => {
     const errores = [];
     const datosInsertados = [];
 
+    const todasLasEspecialidades = await prisma.especialidad.findMany({
+      select: { idEspecialidad: true, nombre: true },
+    });
+
+    const especialidadesMap = new Map();
+    todasLasEspecialidades.forEach((esp) => {
+      especialidadesMap.set(
+        String(esp.nombre).trim().toUpperCase(),
+        esp.idEspecialidad,
+      );
+    });
     for (const fila of datosExcel) {
       const nombreExcel = fila["NOMBRE"];
       const paternoExcel = fila["PATERNO"];
@@ -220,36 +260,28 @@ const cargarDocentesMasivos = async (req, res) => {
         let especialidadId = null;
 
         if (especialidadExcel) {
-          const especialidad = await prisma.especialidad.findFirst({
-            where: {
-              nombre: {
-                equals: String(especialidadExcel).trim(),
-                mode: "insensitive",
-              },
-            },
-            select: { idEspecialidad: true },
-          });
+          const nombreEspBuscada = String(especialidadExcel)
+            .trim()
+            .toUpperCase();
 
-          if (!especialidad) {
+          if (especialidadesMap.has(nombreEspBuscada)) {
+            especialidadId = especialidadesMap.get(nombreEspBuscada);
+          } else {
             errores.push({
               numeroEmpleado: numEmpleadoExcel,
-              error: `La especialidad \"${especialidadExcel}\" no existe`,
+              error: `La especialidad "${especialidadExcel}" no existe`,
             });
             continue;
           }
-
-          especialidadId = especialidad.idEspecialidad;
         }
 
         await prisma.$transaction(async (tx) => {
-          // Buscar si ya existe un docente con ese número de empleado
           const docenteExistente = await tx.docente.findFirst({
             where: { numeroEmpleado: numEmpleadoLimpio },
             include: { usuario: true },
           });
 
           if (docenteExistente) {
-            // Si existe, actualizar solo los campos que sean diferentes
             const usuarioUpdate = {};
             if (nombreExcel !== docenteExistente.usuario.nombre)
               usuarioUpdate.nombre = nombreExcel;
@@ -261,6 +293,7 @@ const cargarDocentesMasivos = async (req, res) => {
               (maternoExcel || "") !== docenteExistente.usuario.apellidoMaterno
             )
               usuarioUpdate.apellidoMaterno = maternoExcel || "";
+
             if (
               curpExcel.trim().toUpperCase() !== docenteExistente.usuario.curp
             ) {
@@ -273,15 +306,15 @@ const cargarDocentesMasivos = async (req, res) => {
               fechaNac &&
               fechaNac.getTime() !==
                 docenteExistente.usuario.fechaNacimiento?.getTime()
-            )
+            ) {
               usuarioUpdate.fechaNacimiento = fechaNac;
+            }
 
             const docenteUpdate = {};
             if (especialidadId !== docenteExistente.especialidadId) {
               docenteUpdate.especialidadId = especialidadId;
             }
 
-            // Actualizar usuario si hay cambios
             if (Object.keys(usuarioUpdate).length > 0) {
               await tx.usuario.update({
                 where: { idUsuario: docenteExistente.usuarioId },
@@ -296,9 +329,7 @@ const cargarDocentesMasivos = async (req, res) => {
               });
             }
           } else {
-            // Si no existe, crear nuevo
             const hashedPassword = await bcrypt.hash(passwordInicial, 10);
-
             const nuevoUsuario = await tx.usuario.create({
               data: {
                 nombre: nombreExcel,
@@ -381,7 +412,6 @@ const eliminarDocente = async (req, res) => {
 
     res.json({ ok: true, mensaje: "Docente eliminado correctamente" });
   } catch (error) {
-
     if (error.code === "P2003") {
       return res.status(400).json({
         ok: false,
@@ -495,7 +525,6 @@ const actualizarDocente = async (req, res) => {
 
     res.json({ ok: true, mensaje: "Docente actualizado correctamente" });
   } catch (error) {
-
     if (error.code === "P2002") {
       return res.status(400).json({
         ok: false,

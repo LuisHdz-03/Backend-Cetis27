@@ -123,12 +123,20 @@ const cargarEspecialidadesMasivas = async (req, res) => {
     const errores = [];
     const datosInsertados = [];
 
+    const todasLasEspecialidades = await prisma.especialidad.findMany({
+      select: { idEspecialidad: true, codigo: true, nombre: true, descripcion: true }
+    });
+
+    const especialidadesMap = new Map();
+    todasLasEspecialidades.forEach(esp => {
+      especialidadesMap.set(String(esp.codigo).trim().toUpperCase(), esp);
+    });
+
     for (const fila of datosExcel) {
       const nombre = fila["NOMBRE"];
       const codigo = fila["CODIGO"];
       const descripcion = fila["DESCRIPCION"];
 
-      // Validar campos obligatorios
       if (!nombre || !codigo) {
         errores.push({
           registro: nombre || "Desconocido",
@@ -138,20 +146,14 @@ const cargarEspecialidadesMasivas = async (req, res) => {
       }
 
       try {
-        // Buscar si ya existe una especialidad con ese código
-        const especialidadExiste = await prisma.especialidad.findFirst({
-          where: {
-            codigo: { equals: String(codigo).trim(), mode: "insensitive" },
-          },
-        });
+        const codigoNormalizado = String(codigo).trim().toUpperCase();
+        const nombreNormalizado = String(nombre).trim().toUpperCase();
+        const descripcionNormalizada = descripcion ? String(descripcion).trim() : null;
+
+        const especialidadExiste = especialidadesMap.get(codigoNormalizado);
 
         if (especialidadExiste) {
-          // Si existe, actualizar solo los campos que sean diferentes
           const especialidadUpdate = {};
-          const nombreNormalizado = String(nombre).trim().toUpperCase();
-          const descripcionNormalizada = descripcion
-            ? String(descripcion).trim()
-            : null;
 
           if (nombreNormalizado !== especialidadExiste.nombre)
             especialidadUpdate.nombre = nombreNormalizado;
@@ -166,14 +168,15 @@ const cargarEspecialidadesMasivas = async (req, res) => {
           }
           datosInsertados.push(nombre);
         } else {
-          // Si no existe, crear nueva
           const nuevaEspe = await prisma.especialidad.create({
             data: {
-              nombre: String(nombre).trim().toUpperCase(),
-              codigo: String(codigo).trim().toUpperCase(),
-              descripcion: descripcion ? String(descripcion).trim() : null,
+              nombre: nombreNormalizado,
+              codigo: codigoNormalizado,
+              descripcion: descripcionNormalizada,
             },
           });
+          
+          especialidadesMap.set(codigoNormalizado, nuevaEspe);
           datosInsertados.push(nuevaEspe.nombre);
         }
       } catch (error) {

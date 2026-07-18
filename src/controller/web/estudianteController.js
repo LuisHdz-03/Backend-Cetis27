@@ -64,6 +64,9 @@ const extraerFechaPasswordDesdeCURP = (curp) => {
   }
 };
 
+const mensajeEntregaCredenciales =
+  "La contraseña inicial y el token de acceso para padres deben entregarse por un canal seguro fuera de esta respuesta.";
+
 const crearEstudiante = async (req, res) => {
   try {
     const {
@@ -79,11 +82,30 @@ const crearEstudiante = async (req, res) => {
       direccion,
     } = req.body;
 
+    if (!nombre || String(nombre).trim() === "") {
+      return res.status(400).json({ error: "El nombre es obligatorio" });
+    }
+
+    if (!matricula || String(matricula).trim() === "") {
+      return res.status(400).json({ error: "La matrícula es obligatoria" });
+    }
+
+    if (!curp || String(curp).trim() === "") {
+      return res.status(400).json({ error: "La CURP es obligatoria" });
+    }
+
     const matriculaLimpia = limpiarMatricula(matricula);
     const fechaNac = extraerFechaDesdeCURP(curp);
     const usernameGenerado = matriculaLimpia;
     const emailNormalizado = email ? email.trim().toLowerCase() : null;
     const passwordInicial = extraerFechaPasswordDesdeCURP(curp);
+
+    if (!passwordInicial) {
+      return res.status(400).json({
+        error:
+          "No se pudo generar la contraseña inicial. Verifica que la CURP tenga el formato correcto.",
+      });
+    }
 
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(passwordInicial, salt);
@@ -132,10 +154,8 @@ const crearEstudiante = async (req, res) => {
       mensaje: "estudiante creado exitosamente",
       credenciales: {
         username: resultado.usuario.username,
-        password_inicial: passwordInicial,
-        tokenPadre: resultado.estudiante.tokenPadre,
-        aviso:
-          "El usuario debe cambiar la contraseña en el primer inicio de sesión. El tokenPadre es para acceso de padres/tutores.",
+        requiereEntregaSegura: true,
+        aviso: mensajeEntregaCredenciales,
       },
     });
   } catch (error) {
@@ -158,7 +178,7 @@ const getEstudiantes = async (req, res) => {
       prisma.estudiante.findMany({
         skip: skip,
         take: limit,
-        orderBy: { idEstudiante: 'desc' }, 
+        orderBy: { idEstudiante: "desc" },
         include: {
           usuario: {
             select: {
@@ -185,7 +205,7 @@ const getEstudiantes = async (req, res) => {
           tutor: true,
         },
       }),
-      prisma.estudiante.count()
+      prisma.estudiante.count(),
     ]);
 
     const totalPages = Math.ceil(totalRegistros / limit);
@@ -197,8 +217,8 @@ const getEstudiantes = async (req, res) => {
         totalRegistros,
         totalPages,
         currentPage: page,
-        limit
-      }
+        limit,
+      },
     });
   } catch (error) {
     res.status(500).json({ error: "Error al obtener los alumnos" });
@@ -415,7 +435,7 @@ const actualizarEstudiante = async (req, res) => {
       semestre,
       grupoId,
       tutor,
-      email, // <-- Hacemos email opcional
+      email,
     } = req.body;
 
     const estudianteExistente = await prisma.estudiante.findUnique({

@@ -198,10 +198,15 @@ const getMateria = async (req, res) => {
   try {
     const materias = await prisma.materia.findMany({
       include: includeMateriaDetalle,
+      orderBy: [
+        { especialidad: { nombre: "asc" } },
+        { semestre: "asc" },
+        { nombre: "asc" },
+      ],
     });
     res.json(materias);
   } catch (error) {
-    res.status(500).json({ error: "error al obtener las materias" });
+    res.status(500).json({ error: "Error al obtener materias" });
   }
 };
 
@@ -280,14 +285,11 @@ const actualizarMateria = async (req, res) => {
       dataActualizar.codigo = codigo ? codigo.trim().toUpperCase() : null;
     if (horasSemana !== undefined)
       dataActualizar.horasSemana = horasSemanaResueltas;
-    if (semestre !== undefined)
-      dataActualizar.semestre = semestreResuelto;
+    if (semestre !== undefined) dataActualizar.semestre = semestreResuelto;
     if (especialidadId !== undefined)
       dataActualizar.especialidadId = especialidadResuelta;
-    if (espacioId !== undefined)
-      dataActualizar.espacioId = espacioResuelto;
-    if (creditos !== undefined)
-      dataActualizar.creditos = creditosResueltos;
+    if (espacioId !== undefined) dataActualizar.espacioId = espacioResuelto;
+    if (creditos !== undefined) dataActualizar.creditos = creditosResueltos;
     if (horasPractica !== undefined)
       dataActualizar.horasPractica = horasPracticaResueltas;
     if (horasTeoria !== undefined)
@@ -342,139 +344,113 @@ const cargarMateriasMasivas = async (req, res) => {
 
     const datosExcel = parseExcelRowsSafe(req.file.buffer);
 
-    const validacionCarga = validateBulkRows(datosExcel);
-    if (validacionCarga) {
-      return res
-        .status(validacionCarga.status)
-        .json({ ok: false, error: validacionCarga.error });
-    }
+    const [todasLasEspe, todosLosEspacios, todasLasMaterias] =
+      await Promise.all([
+        prisma.especialidad.findMany({
+          select: { idEspecialidad: true, nombre: true },
+        }),
+        prisma.espacio.findMany({
+          where: { activo: true },
+          select: { idEspacio: true, nombre: true },
+        }),
+        prisma.materia.findMany({
+          select: {
+            idMateria: true,
+            nombre: true,
+            codigo: true,
+            horasSemana: true,
+            semestre: true,
+            especialidadId: true,
+            espacioId: true,
+            creditos: true,
+            horasPractica: true,
+            horasTeoria: true,
+          },
+        }),
+      ]);
+
+    const espeMap = new Map(
+      todasLasEspe.map((e) => [
+        String(e.nombre).trim().toUpperCase(),
+        e.idEspecialidad,
+      ]),
+    );
+    const espMap = new Map(
+      todosLosEspacios.map((e) => [
+        String(e.nombre).trim().toUpperCase(),
+        e.idEspacio,
+      ]),
+    );
+    const matMap = new Map(
+      todasLasMaterias.map((m) => [String(m.nombre).trim().toUpperCase(), m]),
+    );
 
     const errores = [];
     const datosInsertados = [];
 
     for (const fila of datosExcel) {
       const nombre = getExcelValue(fila, ["NOMBRE", "MATERIA"]);
-      const codigo = getExcelValue(fila, ["CODIGO", "CÓDIGO"]);
-      const horasSemana = getExcelValue(fila, [
-        "HORAS_SEMANA",
-        "HORAS SEMANA",
-        "HORAS_SEMANALES",
-      ]);
-      const semestre = getExcelValue(fila, ["SEMESTRE"]);
-      const especialidadNombre = getExcelValue(fila, [
-        "ESPECIALIDAD",
-        "CARRERA",
-      ]);
-      const espacioNombre = getExcelValue(fila, ["ESPACIO", "AULA"]);
-      const creditos = getExcelValue(fila, ["CREDITOS", "CRÉDITOS"]);
-      const horasPractica = getExcelValue(fila, [
-        "HORAS_PRACTICA",
-        "HORAS PRACTICA",
-        "HORAS_PRÁCTICA",
-      ]);
-      const horasTeoria = getExcelValue(fila, [
-        "HORAS_TEORIA",
-        "HORAS TEORIA",
-        "HORAS_TEÓRIA",
-      ]);
-
-      // Validar campo obligatorio
       if (!nombre) {
         errores.push({
-          registro: nombre || "Desconocido",
+          registro: "Desconocido",
           error: "Falta la columna NOMBRE",
         });
         continue;
       }
 
       try {
-        // Si se especifica especialidad, buscarla por nombre
-        let especialidadId = null;
-        if (especialidadNombre) {
-          const especialidadExiste = await prisma.especialidad.findFirst({
-            where: {
-              nombre: {
-                equals: String(especialidadNombre).trim(),
-                mode: "insensitive",
-              },
-            },
-          });
+        const nombreNorm = String(nombre).trim().toUpperCase();
 
-          if (!especialidadExiste) {
-            errores.push({
-              registro: nombre,
-              error: `La especialidad "${especialidadNombre}" no existe`,
-            });
-            continue;
-          }
-          especialidadId = especialidadExiste.idEspecialidad;
-        }
+        const especialidadNombre = getExcelValue(fila, [
+          "ESPECIALIDAD",
+          "CARRERA",
+        ]);
+        const especialidadId = especialidadNombre
+          ? espeMap.get(String(especialidadNombre).trim().toUpperCase())
+          : null;
 
-        let espacioId = null;
-        if (espacioNombre) {
-          const espacioResuelto = await resolverEspacioIdPorNombre(espacioNombre);
-          if (espacioResuelto?.error) {
-            errores.push({
-              registro: nombre,
-              error: espacioResuelto.error,
-            });
-            continue;
-          }
-          espacioId = espacioResuelto;
-        }
+        const espacioNombre = getExcelValue(fila, ["ESPACIO", "AULA"]);
+        const espacioId = espacioNombre
+          ? espMap.get(String(espacioNombre).trim().toUpperCase())
+          : null;
 
-        const horasInt = parseNullableInt(horasSemana, "HORAS_SEMANA");
-        if (horasInt?.error) {
-          errores.push({ registro: nombre, error: horasInt.error });
-          continue;
-        }
-
-        const semestreInt = parseNullableInt(semestre, "SEMESTRE");
-        if (semestreInt?.error) {
-          errores.push({ registro: nombre, error: semestreInt.error });
-          continue;
-        }
-
-        const creditosInt = parseNullableInt(creditos, "CREDITOS");
-        if (creditosInt?.error) {
-          errores.push({ registro: nombre, error: creditosInt.error });
-          continue;
-        }
-
+        const horasInt = parseNullableInt(
+          getExcelValue(fila, [
+            "HORAS_SEMANA",
+            "HORAS SEMANA",
+            "HORAS_SEMANALES",
+          ]),
+          "HORAS_SEMANA",
+        );
+        const semestreInt = parseNullableInt(
+          getExcelValue(fila, ["SEMESTRE"]),
+          "SEMESTRE",
+        );
+        const creditosInt = parseNullableInt(
+          getExcelValue(fila, ["CREDITOS", "CRÉDITOS"]),
+          "CREDITOS",
+        );
         const horasPracticaInt = parseNullableInt(
-          horasPractica,
+          getExcelValue(fila, [
+            "HORAS_PRACTICA",
+            "HORAS PRACTICA",
+            "HORAS_PRÁCTICA",
+          ]),
           "HORAS_PRACTICA",
         );
-        if (horasPracticaInt?.error) {
-          errores.push({ registro: nombre, error: horasPracticaInt.error });
-          continue;
-        }
-
         const horasTeoriaInt = parseNullableInt(
-          horasTeoria,
+          getExcelValue(fila, ["HORAS_TEORIA", "HORAS TEORIA", "HORAS_TEÓRIA"]),
           "HORAS_TEORIA",
         );
-        if (horasTeoriaInt?.error) {
-          errores.push({ registro: nombre, error: horasTeoriaInt.error });
-          continue;
-        }
 
-        // Buscar si ya existe una materia con ese nombre
-        const materiaExiste = await prisma.materia.findFirst({
-          where: {
-            nombre: { equals: String(nombre).trim(), mode: "insensitive" },
-          },
-        });
+        const materiaExiste = matMap.get(nombreNorm);
 
         if (materiaExiste) {
-          // Si existe, actualizar solo los campos que sean diferentes
           const materiaUpdate = {};
-          const codigoNormalizado = codigo
-            ? String(codigo).trim().toUpperCase()
-            : null;
+          const codigo = getExcelValue(fila, ["CODIGO", "CÓDIGO"]);
+          const codNorm = codigo ? String(codigo).trim().toUpperCase() : null;
 
-          if (codigoNormalizado !== materiaExiste.codigo)
-            materiaUpdate.codigo = codigoNormalizado;
+          if (codNorm !== materiaExiste.codigo) materiaUpdate.codigo = codNorm;
           if (horasInt !== materiaExiste.horasSemana)
             materiaUpdate.horasSemana = horasInt;
           if (semestreInt !== materiaExiste.semestre)
@@ -483,12 +459,6 @@ const cargarMateriasMasivas = async (req, res) => {
             materiaUpdate.especialidadId = especialidadId;
           if (espacioId !== materiaExiste.espacioId)
             materiaUpdate.espacioId = espacioId;
-          if (creditosInt !== materiaExiste.creditos)
-            materiaUpdate.creditos = creditosInt;
-          if (horasPracticaInt !== materiaExiste.horasPractica)
-            materiaUpdate.horasPractica = horasPracticaInt;
-          if (horasTeoriaInt !== materiaExiste.horasTeoria)
-            materiaUpdate.horasTeoria = horasTeoriaInt;
 
           if (Object.keys(materiaUpdate).length > 0) {
             await prisma.materia.update({
@@ -498,46 +468,37 @@ const cargarMateriasMasivas = async (req, res) => {
           }
           datosInsertados.push(nombre);
         } else {
-          // Si no existe, crear nueva materia
           const nuevaMateria = await prisma.materia.create({
             data: {
               nombre: String(nombre).trim(),
-              codigo: codigo ? String(codigo).trim().toUpperCase() : null,
-              horasSemana: horasSemana ? parseInt(horasSemana) : null,
+              codigo: getExcelValue(fila, ["CODIGO", "CÓDIGO"])
+                ? String(getExcelValue(fila, ["CODIGO", "CÓDIGO"]))
+                    .trim()
+                    .toUpperCase()
+                : null,
+              horasSemana: horasInt,
               semestre: semestreInt,
-              especialidadId: especialidadId,
-              espacioId: espacioId,
+              especialidadId,
+              espacioId,
               creditos: creditosInt,
               horasPractica: horasPracticaInt,
               horasTeoria: horasTeoriaInt,
             },
           });
+          matMap.set(nombreNorm, nuevaMateria);
           datosInsertados.push(nuevaMateria.nombre);
         }
       } catch (error) {
         errores.push({
           registro: nombre,
-          error: error.message || "Error al guardar la materia",
+          error: error.message || "Error al procesar",
         });
       }
     }
 
-    if (errores.length > 0) {
-    }
-
-    const feedback = buildBulkProcessingFeedback(
-      datosInsertados.length,
-      errores.length,
-    );
-
     res.json({
       ok: true,
       mensaje: "Carga masiva finalizada",
-      resultadoProcesamiento: buildBulkProcessingMessage(
-        datosInsertados.length,
-        errores.length,
-      ),
-      feedback,
       insertados: datosInsertados.length,
       fallidos: errores.length,
       detalles: errores,
@@ -592,14 +553,39 @@ const descargarPlantillaMaterias = async (req, res) => {
 
     const instrucciones = [
       { CAMPO: "NOMBRE", DESCRIPCION: "Nombre de la materia (obligatorio)" },
-      { CAMPO: "CODIGO", DESCRIPCION: "Código de la materia (opcional, recomendable único)" },
-      { CAMPO: "HORAS SEMANA", DESCRIPCION: "Horas por semana (opcional, número entero)" },
-      { CAMPO: "SEMESTRE", DESCRIPCION: "Semestre de la materia (opcional, número entero)" },
-      { CAMPO: "CREDITOS", DESCRIPCION: "Créditos de la materia (opcional, número entero)" },
-      { CAMPO: "HORAS PRACTICA", DESCRIPCION: "Horas prácticas (opcional, número entero)" },
-      { CAMPO: "HORAS TEORIA", DESCRIPCION: "Horas teóricas (opcional, número entero)" },
-      { CAMPO: "ESPECIALIDAD", DESCRIPCION: "Nombre de la especialidad o carrera existente (opcional)" },
-      { CAMPO: "ESPACIO", DESCRIPCION: "Nombre del espacio activo existente para la materia (opcional)" },
+      {
+        CAMPO: "CODIGO",
+        DESCRIPCION: "Código de la materia (opcional, recomendable único)",
+      },
+      {
+        CAMPO: "HORAS SEMANA",
+        DESCRIPCION: "Horas por semana (opcional, número entero)",
+      },
+      {
+        CAMPO: "SEMESTRE",
+        DESCRIPCION: "Semestre de la materia (opcional, número entero)",
+      },
+      {
+        CAMPO: "CREDITOS",
+        DESCRIPCION: "Créditos de la materia (opcional, número entero)",
+      },
+      {
+        CAMPO: "HORAS PRACTICA",
+        DESCRIPCION: "Horas prácticas (opcional, número entero)",
+      },
+      {
+        CAMPO: "HORAS TEORIA",
+        DESCRIPCION: "Horas teóricas (opcional, número entero)",
+      },
+      {
+        CAMPO: "ESPECIALIDAD",
+        DESCRIPCION: "Nombre de la especialidad o carrera existente (opcional)",
+      },
+      {
+        CAMPO: "ESPACIO",
+        DESCRIPCION:
+          "Nombre del espacio activo existente para la materia (opcional)",
+      },
     ];
 
     const wb = XLSX.utils.book_new();

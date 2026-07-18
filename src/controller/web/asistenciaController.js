@@ -380,14 +380,29 @@ const justificarFalta = async (req, res) => {
 
 const getHistorialAsistencias = async (req, res) => {
   try {
-    const { claseId, alumnoId, fechaInicio, fechaFin } = req.query;
+    const {
+      claseId,
+      alumnoId,
+      fechaInicio,
+      fechaFin,
+      page = 1,
+      limit = 50,
+    } = req.query;
 
     const whereClause = {};
+    let hasFilter = false;
 
-    if (claseId) whereClause.claseId = parseInt(claseId, 10);
-    if (alumnoId) whereClause.alumnoId = parseInt(alumnoId, 10);
+    if (claseId) {
+      whereClause.claseId = parseInt(claseId, 10);
+      hasFilter = true;
+    }
+    if (alumnoId) {
+      whereClause.alumnoId = parseInt(alumnoId, 10);
+      hasFilter = true;
+    }
 
     if (fechaInicio || fechaFin) {
+      hasFilter = true;
       whereClause.fecha = {};
       if (fechaInicio) {
         const rangoInicio = construirRangoFechaLocal(fechaInicio);
@@ -409,33 +424,55 @@ const getHistorialAsistencias = async (req, res) => {
       }
     }
 
-    const historial = await prisma.asistencia.findMany({
-      where: whereClause,
-      include: {
-        alumno: {
-          include: {
-            usuario: {
-              select: {
-                nombre: true,
-                apellidoPaterno: true,
-                apellidoMaterno: true,
+    if (!hasFilter) {
+      return res.status(400).json({
+        error:
+          "Debe proporcionar al menos un filtro de búsqueda (claseId, alumnoId o rango de fechas).",
+      });
+    }
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const [historial, totalRegistros] = await Promise.all([
+      prisma.asistencia.findMany({
+        where: whereClause,
+        skip,
+        take: parseInt(limit),
+        include: {
+          alumno: {
+            include: {
+              usuario: {
+                select: {
+                  nombre: true,
+                  apellidoPaterno: true,
+                  apellidoMaterno: true,
+                },
               },
             },
           },
-        },
-        clase: {
-          include: {
-            materias: true,
+          clase: {
+            include: {
+              materias: true,
+            },
           },
         },
-      },
-      orderBy: [
-        { fecha: "desc" },
-        { alumno: { usuario: { apellidoPaterno: "asc" } } },
-      ],
-    });
+        orderBy: [
+          { fecha: "desc" },
+          { alumno: { usuario: { apellidoPaterno: "asc" } } },
+        ],
+      }),
+      prisma.asistencia.count({ where: whereClause }),
+    ]);
 
-    return res.json(historial.map(formatearAsistenciaSalida));
+    return res.json({
+      data: historial.map(formatearAsistenciaSalida),
+      pagination: {
+        totalRegistros,
+        totalPages: Math.ceil(totalRegistros / parseInt(limit)),
+        currentPage: parseInt(page),
+        limit: parseInt(limit),
+      },
+    });
   } catch (error) {
     return res
       .status(500)

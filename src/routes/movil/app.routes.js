@@ -1,7 +1,10 @@
 const { Router } = require("express");
 const router = Router();
 
-const { verificarToken } = require("../../middlewares/authMiddleware");
+const {
+  verificarToken,
+  verificarTokenPadre,
+} = require("../../middlewares/authMiddleware");
 const {
   bitacoraLogin,
   bitacoraConsultar,
@@ -37,10 +40,12 @@ router.post("/movil/padres/login", loginPadre);
 router.post("/movil/padre/login", loginPadre);
 router.get(
   "/padres/estatus-completo/:idEstudiante",
+  verificarTokenPadre,
   consultarEstatusCompletoEstudiante,
 );
 router.get(
   "/padre/estatus-completo/:idEstudiante",
+  verificarTokenPadre,
   consultarEstatusCompletoEstudiante,
 );
 router.use(verificarToken);

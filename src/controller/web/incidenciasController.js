@@ -87,9 +87,12 @@ const getReporte = async (req, res) => {
       fechaFin,
       busqueda,
       reporteId,
+      page = 1,
+      limit = 50,
     } = req.query;
 
     const whereClause = {};
+    const skip = (parseInt(page) - 1) * parseInt(limit);
 
     if (reporteId) {
       const parsedReporteId = parseInt(reporteId, 10);
@@ -170,46 +173,59 @@ const getReporte = async (req, res) => {
       ];
     }
 
-    const reportes = await prisma.reporte.findMany({
-      where: whereClause,
-      include: {
-        alumno: {
-          include: {
-            usuario: {
-              select: {
-                nombre: true,
-                apellidoPaterno: true,
-                apellidoMaterno: true,
+    const [reportes, totalRegistros] = await Promise.all([
+      prisma.reporte.findMany({
+        where: whereClause,
+        skip,
+        take: parseInt(limit),
+        include: {
+          alumno: {
+            include: {
+              usuario: {
+                select: {
+                  nombre: true,
+                  apellidoPaterno: true,
+                  apellidoMaterno: true,
+                },
               },
-            },
-            grupo: {
-              include: {
-                especialidad: true,
+              grupo: {
+                include: {
+                  especialidad: true,
+                },
               },
-            },
-            tutor: {
-              select: {
-                nombre: true,
-                apellidoPaterno: true,
-                apellidoMaterno: true,
-                telefono: true,
-                parentesco: true,
-                email: true,
-                direccion: true,
+              tutor: {
+                select: {
+                  nombre: true,
+                  apellidoPaterno: true,
+                  apellidoMaterno: true,
+                  telefono: true,
+                  parentesco: true,
+                  email: true,
+                  direccion: true,
+                },
               },
             },
           },
-        },
-        docente: {
-          include: {
-            usuario: { select: { nombre: true, apellidoPaterno: true } },
+          docente: {
+            include: {
+              usuario: { select: { nombre: true, apellidoPaterno: true } },
+            },
           },
         },
-      },
-      orderBy: { fecha: "desc" },
-    });
+        orderBy: { fecha: "desc" },
+      }),
+      prisma.reporte.count({ where: whereClause }),
+    ]);
 
-    res.json(reportes);
+    res.json({
+      data: reportes,
+      pagination: {
+        totalRegistros,
+        totalPages: Math.ceil(totalRegistros / parseInt(limit)),
+        currentPage: parseInt(page),
+        limit: parseInt(limit),
+      },
+    });
   } catch (error) {
     res.status(500).json({ error: "Error al obtener los reportes" });
   }
@@ -278,19 +294,27 @@ const atenderReporte = async (req, res) => {
 
 const getHistorialAlumno = async (req, res) => {
   const { alumnoId } = req.params;
+  const { page = 1, limit = 20 } = req.query;
+
   try {
-    const historial = await prisma.reporte.findMany({
-      where: { alumnoId: parseInt(alumnoId) },
-      orderBy: { fecha: "desc" },
-      include: {
-        docente: {
-          include: {
-            usuario: { select: { nombre: true, apellidoPaterno: true } },
+    const [historial, total] = await Promise.all([
+      prisma.reporte.findMany({
+        where: { alumnoId: parseInt(alumnoId) },
+        orderBy: { fecha: "desc" },
+        take: parseInt(limit),
+        skip: (parseInt(page) - 1) * parseInt(limit),
+        include: {
+          docente: {
+            include: {
+              usuario: { select: { nombre: true, apellidoPaterno: true } },
+            },
           },
         },
-      },
-    });
-    res.json(historial);
+      }),
+      prisma.reporte.count({ where: { alumnoId: parseInt(alumnoId) } }),
+    ]);
+
+    res.json({ data: historial, total });
   } catch (error) {
     res.status(500).json({ error: "Error al obtener historial." });
   }

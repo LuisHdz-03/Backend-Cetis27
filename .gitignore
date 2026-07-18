@@ -3,3 +3,7 @@ node_modules
 .env
 
 /src/generated/prisma
+/artillery
+/artillery/*.csv
+/artillery/*.json
+!/artillery/*.csv.example

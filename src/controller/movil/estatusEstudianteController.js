@@ -1,11 +1,30 @@
 // Controlador para que el padre/tutor consulte el estatus del estudiante
 const prisma = require("../../config/prisma");
 
+const validarAccesoEstudiante = (req, idEstudiante) => {
+  return (
+    req.usuario?.rol === "PADRE" && req.usuario?.idEstudiante === idEstudiante
+  );
+};
+
 const consultarEstatusEstudiante = async (req, res) => {
   try {
     const { idEstudiante } = req.params;
+    const idEstudianteNum = Number(idEstudiante);
+
+    if (!Number.isInteger(idEstudianteNum)) {
+      return res.status(400).json({ mensaje: "ID de estudiante inválido." });
+    }
+
+    if (!validarAccesoEstudiante(req, idEstudianteNum)) {
+      return res.status(403).json({
+        error:
+          "No tienes permisos para consultar información de otro estudiante.",
+      });
+    }
+
     const estudiante = await prisma.estudiante.findUnique({
-      where: { idEstudiante: Number(idEstudiante) },
+      where: { idEstudiante: idEstudianteNum },
       include: {
         usuario: {
           select: {
@@ -47,9 +66,22 @@ const consultarEstatusEstudiante = async (req, res) => {
 const consultarEstatusCompletoEstudiante = async (req, res) => {
   try {
     const { idEstudiante } = req.params;
+    const idEstudianteNum = Number(idEstudiante);
+
+    if (!Number.isInteger(idEstudianteNum)) {
+      return res.status(400).json({ error: "ID de estudiante inválido" });
+    }
+
+    if (!validarAccesoEstudiante(req, idEstudianteNum)) {
+      return res.status(403).json({
+        error:
+          "No tienes permisos para consultar información de otro estudiante.",
+      });
+    }
+
     // Resumen
     const estudiante = await prisma.estudiante.findUnique({
-      where: { idEstudiante: Number(idEstudiante) },
+      where: { idEstudiante: idEstudianteNum },
       include: {
         usuario: {
           select: {

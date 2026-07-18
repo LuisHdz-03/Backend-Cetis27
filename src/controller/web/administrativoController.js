@@ -96,6 +96,9 @@ const normalizarCargo = (cargo) => {
 const obtenerRolDesdeCargo = (cargoNormalizado) =>
   rolPorCargo[cargoNormalizado] || "ADMINISTRATIVO";
 
+const mensajeEntregaCredenciales =
+  "La contraseña inicial debe entregarse por un canal seguro fuera de esta respuesta.";
+
 const validarDirectorUnicoActivo = async (
   tx,
   cargoNormalizado,
@@ -216,9 +219,8 @@ const crearAdministrativo = async (req, res) => {
       mensaje: `Personal registrado correctamente como ${rolAsignar} (${cargoParaMostrar[cargoNormalizado] || cargoNormalizado})`,
       credenciales: {
         username: nuevoAdmin.usuario.username,
-        password_inicial: passwordInicial,
-        aviso:
-          "El usuario debe cambiar la contraseña en el primer inicio de sesión.",
+        requiereEntregaSegura: true,
+        aviso: mensajeEntregaCredenciales,
       },
       data: nuevoAdmin,
     });
@@ -255,6 +257,11 @@ const getAdministrativos = async (req, res) => {
             rol: true,
             activo: true,
           },
+        },
+      },
+      orderBy: {
+        usuario: {
+          nombre: "asc",
         },
       },
     });
@@ -601,7 +608,6 @@ const actualizarAdministrativo = async (req, res) => {
       data: actualizado,
     });
   } catch (error) {
-
     if (error.code === "DIRECTOR_ACTIVO_DUPLICADO") {
       return res.status(400).json({
         ok: false,

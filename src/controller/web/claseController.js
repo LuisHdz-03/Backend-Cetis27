@@ -735,14 +735,12 @@ const sincronizarClasesGrupo = async (req, res) => {
 
 const getClase = async (req, res) => {
   try {
-    // 1. Recibimos parámetros de la URL (si no mandan, se usan valores por defecto)
+    
     const pagina = parseInt(req.query.pagina) || 1;
     const limite = parseInt(req.query.limite) || 50;
 
-    // Filtros opcionales
     const { docenteId, grupoId, materiaId, buscarMateria } = req.query;
 
-    // 2. Armamos el objeto dinámico de filtros (empezamos vacío)
     let filtro = {};
 
     if (docenteId) {
@@ -755,7 +753,6 @@ const getClase = async (req, res) => {
       filtro.materiaId = parseInt(materiaId);
     }
     if (buscarMateria) {
-      // Para buscar materias escribiendo un pedazo del nombre
       filtro.materias = {
         nombre: { contains: buscarMateria },
       };
@@ -763,8 +760,6 @@ const getClase = async (req, res) => {
 
     const filtroPeriodo = await resolverFiltroPeriodo(req.query);
     filtro = { ...filtro, ...filtroPeriodo };
-
-    // 3. Ejecutamos la consulta a Prisma con Paginación y Filtros
     const clases = await prisma.clase.findMany({
       where: filtro,
       skip: (pagina - 1) * limite,
@@ -772,12 +767,10 @@ const getClase = async (req, res) => {
       include: includeClaseDetalle,
     });
 
-    // 4. Contamos cuántos registros hay en total para la paginación del frontend
     const totalRegistros = await prisma.clase.count({
       where: filtro,
     });
 
-    // 5. Mandamos la respuesta estructurada
     res.json({
       data: clases.map(formatearClaseSalida),
       paginacion: {
@@ -1016,7 +1009,6 @@ const cargarHorariosMasivos = async (req, res) => {
     }
 
     const filas = parseExcelRowsSafe(req.file.buffer, { defval: "" });
-
     const validacionCarga = validateBulkRows(filas);
     if (validacionCarga) {
       return res.status(validacionCarga.status).json({
@@ -1029,21 +1021,45 @@ const cargarHorariosMasivos = async (req, res) => {
     const procesados = [];
     const cacheClases = new Map();
 
+    const periodoActivo = await obtenerPeriodoObjetivo();
+    if (!periodoActivo) {
+      return res.status(400).json({ ok: false, error: "No se encontró periodo activo" });
+    }
+
+    const todosLosGrupos = await prisma.grupo.findMany({
+      select: {
+        idGrupo: true,
+        nombre: true,
+        grado: true,
+        turno: true,
+        especialidadId: true,
+        especialidad: { select: { nombre: true, codigo: true } },
+      },
+    });
+
+    const todosLosDocentes = await prisma.docente.findMany({
+      include: {
+        usuario: {
+          select: { idUsuario: true, nombre: true, apellidoPaterno: true, apellidoMaterno: true },
+        },
+      },
+    });
+
+    const todasLasMaterias = await prisma.materia.findMany({
+      select: { idMateria: true, nombre: true, especialidadId: true, semestre: true },
+      orderBy: [{ idMateria: "asc" }]
+    });
+
     for (let i = 0; i < filas.length; i++) {
       const fila = filas[i];
       const numeroFila = i + 2;
 
-      const nombreGrupo = String(
-        fila["GRUPO_NOMBRE"] || fila["GRUPO"] || "",
-      ).trim();
+      const nombreGrupo = String(fila["GRUPO_NOMBRE"] || fila["GRUPO"] || "").trim();
       const grado = fila["GRADO"];
       const turno = fila["TURNO"];
       const carrera = String(fila["CARRERA"] || "").trim();
       const nombreDocente = String(
-        fila["DOCENTE NOMBRE"] ||
-          fila["DOCENTE_NOMBRE"] ||
-          fila["DOCENTE"] ||
-          "",
+        fila["DOCENTE NOMBRE"] || fila["DOCENTE_NOMBRE"] || fila["DOCENTE"] || ""
       ).trim();
 
       const bloque = construirBloqueHorario(fila);
@@ -1051,60 +1067,59 @@ const cargarHorariosMasivos = async (req, res) => {
       if (!nombreGrupo || !nombreDocente || !bloque) {
         errores.push({
           fila: numeroFila,
-          error:
-            "Faltan datos requeridos: GRUPO, DOCENTE y DIA/HORA INICIO/HORA FIN",
+          error: "Faltan datos requeridos: GRUPO, DOCENTE y DIA/HORA INICIO/HORA FIN",
         });
         continue;
       }
 
-      const grupo = await resolverGrupoSinIds({
-        nombreGrupo,
-        grado,
-        turno,
-        carrera,
+      let grupo = null;
+      const gruposCoincidentes = todosLosGrupos.filter(g => {
+        let coincide = g.nombre.toUpperCase() === nombreGrupo.toUpperCase();
+        if (grado !== undefined && g.grado !== parseInt(grado, 10)) coincide = false;
+        if (turno && g.turno.toUpperCase() !== normalizarTexto(turno)) coincide = false;
+        if (carrera) {
+          const carrNorm = normalizarTexto(carrera);
+          if (normalizarTexto(g.especialidad.nombre) !== carrNorm &&
+              normalizarTexto(g.especialidad.codigo) !== carrNorm) {
+            coincide = false;
+          }
+        }
+        return coincide;
       });
-      if (!grupo) {
-        errores.push({
-          fila: numeroFila,
-          error: `No existe grupo: ${nombreGrupo}`,
-        });
+
+      if (gruposCoincidentes.length === 0) {
+        errores.push({ fila: numeroFila, error: `No existe grupo: ${nombreGrupo}` });
         continue;
-      }
-      if (grupo.error) {
-        errores.push({ fila: numeroFila, error: grupo.error });
+      } else if (gruposCoincidentes.length > 1) {
+        errores.push({ fila: numeroFila, error: "Grupo ambiguo. Agrega GRADO, TURNO o CARRERA para identificarlo." });
         continue;
+      } else {
+        grupo = gruposCoincidentes[0];
       }
 
-      const docente = await resolverDocenteSinIds({
-        nombreDocente,
+      const textoDocente = normalizarTexto(nombreDocente).replace(/\s+/g, " ").trim();
+      let docente = null;
+      
+      const docentesCoincidentes = todosLosDocentes.filter(d => {
+        const nombreCompleto = armarNombreCompleto(d.usuario);
+        return nombreCompleto.includes(textoDocente) || textoDocente.includes(nombreCompleto);
       });
-      if (!docente) {
-        errores.push({
-          fila: numeroFila,
-          error: `No existe docente: ${nombreDocente}`,
-        });
-        continue;
-      }
-      if (docente.error) {
-        errores.push({ fila: numeroFila, error: docente.error });
-        continue;
-      }
 
-      const periodo = await obtenerPeriodoObjetivo();
-
-      if (!periodo) {
-        errores.push({
-          fila: numeroFila,
-          error: "No se encontró periodo activo",
-        });
+      if (docentesCoincidentes.length === 0) {
+        errores.push({ fila: numeroFila, error: `No existe docente: ${nombreDocente}` });
         continue;
+      } else if (docentesCoincidentes.length > 1) {
+        errores.push({ fila: numeroFila, error: "Docente ambiguo. Captura el nombre completo del docente." });
+        continue;
+      } else {
+        docente = docentesCoincidentes[0];
       }
 
       const clasesCandidatas = await prisma.clase.findMany({
         where: {
           grupoId: grupo.idGrupo,
           docenteId: docente.idDocente,
-          periodoId: periodo.idPeriodo,
+          periodoId: periodoActivo.idPeriodo, 
         },
         orderBy: [{ idClase: "asc" }],
         select: { idClase: true, horario: true, materiaId: true },
@@ -1117,19 +1132,24 @@ const cargarHorariosMasivos = async (req, res) => {
           nombre: "(resuelta por clase existente)",
         };
       } else {
-        materiaResuelta = await resolverMateriaPorGrupo({ grupo, grado });
+        const gradoNumero = parseInt(grado, 10);
+        const semestreObjetivo = Number.isNaN(gradoNumero) ? grupo.grado : gradoNumero;
+
+        materiaResuelta = todasLasMaterias.find(m => m.especialidadId === grupo.especialidadId && m.semestre === semestreObjetivo);
+        if (!materiaResuelta) {
+          materiaResuelta = todasLasMaterias.find(m => m.especialidadId === grupo.especialidadId);
+        }
       }
 
       if (!materiaResuelta) {
         errores.push({
           fila: numeroFila,
-          error:
-            "No se pudo resolver materia automaticamente para el grupo/carrera",
+          error: "No se pudo resolver materia automaticamente para el grupo/carrera",
         });
         continue;
       }
 
-      const claveClase = `${grupo.idGrupo}-${materiaResuelta.idMateria}-${docente.idDocente}-${periodo.idPeriodo}`;
+      const claveClase = `${grupo.idGrupo}-${materiaResuelta.idMateria}-${docente.idDocente}-${periodoActivo.idPeriodo}`;
       let claseCache = cacheClases.get(claveClase);
 
       if (!claseCache) {
@@ -1138,7 +1158,7 @@ const cargarHorariosMasivos = async (req, res) => {
             grupoId: grupo.idGrupo,
             materiaId: materiaResuelta.idMateria,
             docenteId: docente.idDocente,
-            periodoId: periodo.idPeriodo,
+            periodoId: periodoActivo.idPeriodo,
           },
           select: { idClase: true, horario: true },
         });
@@ -1149,7 +1169,7 @@ const cargarHorariosMasivos = async (req, res) => {
               grupoId: grupo.idGrupo,
               materiaId: materiaResuelta.idMateria,
               docenteId: docente.idDocente,
-              periodoId: periodo.idPeriodo,
+              periodoId: periodoActivo.idPeriodo,
               horario: "",
             },
             select: { idClase: true, horario: true },
