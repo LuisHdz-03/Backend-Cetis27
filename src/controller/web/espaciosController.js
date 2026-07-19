@@ -102,9 +102,14 @@ const crearEspacio = async (req, res) => {
 
 const getEspacios = async (req, res) => {
   try {
+    const pagina = parseInt(req.query.pagina) || 1;
+    const limite = parseInt(req.query.limite) || 20;
+    const skip = (pagina - 1) * limite;
+
     const { tipo, incluirInactivos } = req.query;
 
     const where = {};
+
     if (
       !incluirInactivos ||
       String(incluirInactivos).toLowerCase() !== "true"
@@ -114,18 +119,33 @@ const getEspacios = async (req, res) => {
 
     if (tipo) {
       const tipoNormalizado = mapearTipoEspacio(tipo);
+
       if (!tipoNormalizado) {
-        return res.status(400).json({ error: "tipo inválido" });
+        return res.status(400).json({ error: "Tipo inválido" });
       }
+
       where.tipo = tipoNormalizado;
     }
 
-    const espacios = await prisma.espacio.findMany({
-      where,
-      orderBy: [{ tipo: "asc" }, { nombre: "asc" }],
-    });
+    const [espacios, totalRegistros] = await Promise.all([
+      prisma.espacio.findMany({
+        where,
+        skip,
+        take: limite,
+        orderBy: [{ tipo: "asc" }, { nombre: "asc" }],
+      }),
+      prisma.espacio.count({ where }),
+    ]);
 
-    return res.json(espacios.map(formatearEspacioSalida));
+    return res.json({
+      data: espacios.map(formatearEspacioSalida),
+      paginacion: {
+        totalRegistros,
+        paginasTotales: Math.ceil(totalRegistros / limite),
+        paginaActual: pagina,
+        limite,
+      },
+    });
   } catch (error) {
     return res.status(500).json({ error: "Error al obtener espacios" });
   }
