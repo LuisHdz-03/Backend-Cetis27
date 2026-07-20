@@ -11,12 +11,27 @@ const getBitacora = async (req, res) => {
     const limit = parseInt(req.query.limit) || 100;
     const skip = (page - 1) * limit;
 
-    const { usuarioId, accion } = req.query;
+    const { usuarioId, accion, busqueda } = req.query;
     const where = {};
 
     if (usuarioId) where.usuarioId = parseInt(usuarioId);
     if (accion) where.accion = accion;
-
+    if (busqueda) {
+      where.OR = [
+        { accion: { contains: busqueda, mode: "insensitive" } },
+        { detalle: { contains: busqueda, mode: "insensitive" } },
+        {
+          usuario: {
+            nombre: { contains: busqueda, mode: "insensitive" },
+          },
+        },
+        {
+          usuario: {
+            apellidoPaterno: { contains: busqueda, mode: "insensitive" },
+          },
+        },
+      ];
+    }
     const [logs, totalRegistros] = await Promise.all([
       prisma.bitacora.findMany({
         where,
