@@ -1,7 +1,9 @@
 const { Router } = require("express");
 const router = Router();
 const multer = require("multer");
-const { uploadExcelSingle } = require("../../middlewares/excelUploadMiddleware");
+const {
+  uploadExcelSingle,
+} = require("../../middlewares/excelUploadMiddleware");
 const upload = multer({ storage: multer.memoryStorage() });
 
 const { soloDirectivo } = require("../../middlewares/authMiddleware");
@@ -22,6 +24,7 @@ const {
   descargarPlantillaAdministrativos,
   subirFirmaDirector,
   obtenerDirectorActivo,
+  getCargosDisponibles,
 } = require("../../controller/web/administrativoController");
 router.get("/director", obtenerDirectorActivo);
 
@@ -51,6 +54,8 @@ router.post(
 // RUTAS BASE
 router.get("/", soloDirectivo, bitacoraConsultar, getAdministrativos);
 router.post("/", soloDirectivo, bitacoraCrear, crearAdministrativo);
+
+router.get("/cargos", soloDirectivo, getCargosDisponibles);
 
 // RUTAS DINÁMICAS (Con :id)
 router.put("/:id", soloDirectivo, bitacoraActualizar, actualizarAdministrativo);

@@ -362,6 +362,25 @@ const getAdministrativos = async (req, res) => {
   }
 };
 
+const getCargosDisponibles = async (req, res) => {
+  try {
+    const cargosUnicos = await prisma.administrativo.findMany({
+      distinct: ["cargo"],
+      select: { cargo: true },
+      orderBy: { cargo: "asc" },
+    });
+
+    const cargosFormateados = cargosUnicos
+      .map((c) => cargoParaMostrar[c.cargo] || c.cargo)
+      .filter(Boolean);
+
+    res.json(cargosFormateados);
+  } catch (error) {
+    console.error("Error getCargosDisponibles:", error);
+    res.status(500).json({ error: "Error al obtener cargos disponibles." });
+  }
+};
+
 const cargarAdministrativosMasivos = async (req, res) => {
   try {
     if (!req.file) {
@@ -954,4 +973,5 @@ module.exports = {
   descargarPlantillaAdministrativos,
   subirFirmaDirector,
   obtenerDirectorActivo,
+  getCargosDisponibles,
 };
