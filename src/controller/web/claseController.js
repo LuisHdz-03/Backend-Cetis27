@@ -555,12 +555,10 @@ const crearClase = async (req, res) => {
       include: includeClaseDetalle,
     });
 
-    res
-      .status(201)
-      .json({
-        mensaje: "Clase creada con éxito",
-        clase: formatearClaseSalida(nuevaClase),
-      });
+    res.status(201).json({
+      mensaje: "Clase creada con éxito",
+      clase: formatearClaseSalida(nuevaClase),
+    });
   } catch (error) {
     if (error.status) {
       return res.status(error.status).json({ error: error.message });
@@ -735,9 +733,30 @@ const sincronizarClasesGrupo = async (req, res) => {
 
 const getClase = async (req, res) => {
   try {
-    
+    const { busqueda } = req.query;
+    const where = {};
+
+    if (busqueda) {
+      where.OR = [
+        { grupo: { nombre: { contains: busqueda, mode: "insensitive" } } },
+        { materias: { nombre: { contains: busqueda, mode: "insensitive" } } },
+        {
+          docente: {
+            usuario: { nombre: { contains: busqueda, mode: "insensitive" } },
+          },
+        },
+        {
+          docente: {
+            usuario: {
+              apellidoPaterno: { contains: busqueda, mode: "insensitive" },
+            },
+          },
+        },
+      ];
+    }
+
     const pagina = parseInt(req.query.pagina) || 1;
-    const limite = parseInt(req.query.limite) || 50;
+    const limite = parseInt(req.query.limite) || 20;
 
     const { docenteId, grupoId, materiaId, buscarMateria } = req.query;
 
@@ -1023,7 +1042,9 @@ const cargarHorariosMasivos = async (req, res) => {
 
     const periodoActivo = await obtenerPeriodoObjetivo();
     if (!periodoActivo) {
-      return res.status(400).json({ ok: false, error: "No se encontró periodo activo" });
+      return res
+        .status(400)
+        .json({ ok: false, error: "No se encontró periodo activo" });
     }
 
     const todosLosGrupos = await prisma.grupo.findMany({
@@ -1040,26 +1061,41 @@ const cargarHorariosMasivos = async (req, res) => {
     const todosLosDocentes = await prisma.docente.findMany({
       include: {
         usuario: {
-          select: { idUsuario: true, nombre: true, apellidoPaterno: true, apellidoMaterno: true },
+          select: {
+            idUsuario: true,
+            nombre: true,
+            apellidoPaterno: true,
+            apellidoMaterno: true,
+          },
         },
       },
     });
 
     const todasLasMaterias = await prisma.materia.findMany({
-      select: { idMateria: true, nombre: true, especialidadId: true, semestre: true },
-      orderBy: [{ idMateria: "asc" }]
+      select: {
+        idMateria: true,
+        nombre: true,
+        especialidadId: true,
+        semestre: true,
+      },
+      orderBy: [{ idMateria: "asc" }],
     });
 
     for (let i = 0; i < filas.length; i++) {
       const fila = filas[i];
       const numeroFila = i + 2;
 
-      const nombreGrupo = String(fila["GRUPO_NOMBRE"] || fila["GRUPO"] || "").trim();
+      const nombreGrupo = String(
+        fila["GRUPO_NOMBRE"] || fila["GRUPO"] || "",
+      ).trim();
       const grado = fila["GRADO"];
       const turno = fila["TURNO"];
       const carrera = String(fila["CARRERA"] || "").trim();
       const nombreDocente = String(
-        fila["DOCENTE NOMBRE"] || fila["DOCENTE_NOMBRE"] || fila["DOCENTE"] || ""
+        fila["DOCENTE NOMBRE"] ||
+          fila["DOCENTE_NOMBRE"] ||
+          fila["DOCENTE"] ||
+          "",
       ).trim();
 
       const bloque = construirBloqueHorario(fila);
@@ -1067,20 +1103,25 @@ const cargarHorariosMasivos = async (req, res) => {
       if (!nombreGrupo || !nombreDocente || !bloque) {
         errores.push({
           fila: numeroFila,
-          error: "Faltan datos requeridos: GRUPO, DOCENTE y DIA/HORA INICIO/HORA FIN",
+          error:
+            "Faltan datos requeridos: GRUPO, DOCENTE y DIA/HORA INICIO/HORA FIN",
         });
         continue;
       }
 
       let grupo = null;
-      const gruposCoincidentes = todosLosGrupos.filter(g => {
+      const gruposCoincidentes = todosLosGrupos.filter((g) => {
         let coincide = g.nombre.toUpperCase() === nombreGrupo.toUpperCase();
-        if (grado !== undefined && g.grado !== parseInt(grado, 10)) coincide = false;
-        if (turno && g.turno.toUpperCase() !== normalizarTexto(turno)) coincide = false;
+        if (grado !== undefined && g.grado !== parseInt(grado, 10))
+          coincide = false;
+        if (turno && g.turno.toUpperCase() !== normalizarTexto(turno))
+          coincide = false;
         if (carrera) {
           const carrNorm = normalizarTexto(carrera);
-          if (normalizarTexto(g.especialidad.nombre) !== carrNorm &&
-              normalizarTexto(g.especialidad.codigo) !== carrNorm) {
+          if (
+            normalizarTexto(g.especialidad.nombre) !== carrNorm &&
+            normalizarTexto(g.especialidad.codigo) !== carrNorm
+          ) {
             coincide = false;
           }
         }
@@ -1088,28 +1129,46 @@ const cargarHorariosMasivos = async (req, res) => {
       });
 
       if (gruposCoincidentes.length === 0) {
-        errores.push({ fila: numeroFila, error: `No existe grupo: ${nombreGrupo}` });
+        errores.push({
+          fila: numeroFila,
+          error: `No existe grupo: ${nombreGrupo}`,
+        });
         continue;
       } else if (gruposCoincidentes.length > 1) {
-        errores.push({ fila: numeroFila, error: "Grupo ambiguo. Agrega GRADO, TURNO o CARRERA para identificarlo." });
+        errores.push({
+          fila: numeroFila,
+          error:
+            "Grupo ambiguo. Agrega GRADO, TURNO o CARRERA para identificarlo.",
+        });
         continue;
       } else {
         grupo = gruposCoincidentes[0];
       }
 
-      const textoDocente = normalizarTexto(nombreDocente).replace(/\s+/g, " ").trim();
+      const textoDocente = normalizarTexto(nombreDocente)
+        .replace(/\s+/g, " ")
+        .trim();
       let docente = null;
-      
-      const docentesCoincidentes = todosLosDocentes.filter(d => {
+
+      const docentesCoincidentes = todosLosDocentes.filter((d) => {
         const nombreCompleto = armarNombreCompleto(d.usuario);
-        return nombreCompleto.includes(textoDocente) || textoDocente.includes(nombreCompleto);
+        return (
+          nombreCompleto.includes(textoDocente) ||
+          textoDocente.includes(nombreCompleto)
+        );
       });
 
       if (docentesCoincidentes.length === 0) {
-        errores.push({ fila: numeroFila, error: `No existe docente: ${nombreDocente}` });
+        errores.push({
+          fila: numeroFila,
+          error: `No existe docente: ${nombreDocente}`,
+        });
         continue;
       } else if (docentesCoincidentes.length > 1) {
-        errores.push({ fila: numeroFila, error: "Docente ambiguo. Captura el nombre completo del docente." });
+        errores.push({
+          fila: numeroFila,
+          error: "Docente ambiguo. Captura el nombre completo del docente.",
+        });
         continue;
       } else {
         docente = docentesCoincidentes[0];
@@ -1119,7 +1178,7 @@ const cargarHorariosMasivos = async (req, res) => {
         where: {
           grupoId: grupo.idGrupo,
           docenteId: docente.idDocente,
-          periodoId: periodoActivo.idPeriodo, 
+          periodoId: periodoActivo.idPeriodo,
         },
         orderBy: [{ idClase: "asc" }],
         select: { idClase: true, horario: true, materiaId: true },
@@ -1133,18 +1192,27 @@ const cargarHorariosMasivos = async (req, res) => {
         };
       } else {
         const gradoNumero = parseInt(grado, 10);
-        const semestreObjetivo = Number.isNaN(gradoNumero) ? grupo.grado : gradoNumero;
+        const semestreObjetivo = Number.isNaN(gradoNumero)
+          ? grupo.grado
+          : gradoNumero;
 
-        materiaResuelta = todasLasMaterias.find(m => m.especialidadId === grupo.especialidadId && m.semestre === semestreObjetivo);
+        materiaResuelta = todasLasMaterias.find(
+          (m) =>
+            m.especialidadId === grupo.especialidadId &&
+            m.semestre === semestreObjetivo,
+        );
         if (!materiaResuelta) {
-          materiaResuelta = todasLasMaterias.find(m => m.especialidadId === grupo.especialidadId);
+          materiaResuelta = todasLasMaterias.find(
+            (m) => m.especialidadId === grupo.especialidadId,
+          );
         }
       }
 
       if (!materiaResuelta) {
         errores.push({
           fila: numeroFila,
-          error: "No se pudo resolver materia automaticamente para el grupo/carrera",
+          error:
+            "No se pudo resolver materia automaticamente para el grupo/carrera",
         });
         continue;
       }
