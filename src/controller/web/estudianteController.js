@@ -231,6 +231,69 @@ const getEstudiantes = async (req, res) => {
     res.status(500).json({ error: "Error al obtener los alumnos" });
   }
 };
+const getEstudiantesParaReporte = async (req, res) => {
+  try {
+    const { busqueda } = req.query;
+
+    const whereClause = {};
+
+    if (busqueda) {
+      const valor = String(busqueda).trim();
+      whereClause.OR = [
+        { matricula: { contains: valor, mode: "insensitive" } },
+        {
+          usuario: {
+            nombre: { contains: valor, mode: "insensitive" },
+          },
+        },
+        {
+          usuario: {
+            apellidoPaterno: { contains: valor, mode: "insensitive" },
+          },
+        },
+      ];
+    }
+
+    const estudiantes = await prisma.estudiante.findMany({
+      where: whereClause,
+      orderBy: { idEstudiante: "desc" },
+      // sin skip/take: aquí sí queremos todos los que matcheen la búsqueda
+      select: {
+        idEstudiante: true,
+        matricula: true,
+        semestre: true,
+        usuario: {
+          select: {
+            nombre: true,
+            apellidoPaterno: true,
+            apellidoMaterno: true,
+            telefono: true,
+          },
+        },
+        grupo: {
+          select: {
+            idGrupo: true,
+            nombre: true,
+            especialidadId: true,
+            especialidad: { select: { nombre: true } },
+          },
+        },
+        tutor: {
+          select: {
+            nombre: true,
+            apellidoPaterno: true,
+            apellidoMaterno: true,
+            telefono: true,
+          },
+        },
+      },
+    });
+
+    res.json({ data: estudiantes });
+  } catch (error) {
+    res.status(500).json({ error: "Error al obtener alumnos para reporte" });
+  }
+};
 
 const cargarDatosMasivos = async (req, res) => {
   try {
@@ -748,4 +811,5 @@ module.exports = {
   getEstudiantesPorGrupo,
   descargarPlantillaEstudiantes,
   getDatosCredenciales,
+  getEstudiantesParaReporte,
 };

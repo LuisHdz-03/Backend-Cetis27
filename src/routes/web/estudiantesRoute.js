@@ -24,6 +24,7 @@ const {
   eliminarEstudiante,
   getEstudiantesPorGrupo,
   descargarPlantillaEstudiantes,
+  getEstudiantesParaReporte,
 } = require("../../controller/web/estudianteController");
 
 // Obtener datos para credenciales (para frontend)
@@ -41,6 +42,12 @@ router.get(
   verificarRol("ADMINISTRATIVO", "DIRECTIVO", "PREFECTO"),
   bitacoraConsultar,
   getEstudiantes,
+);
+router.get(
+  "/para-reporte",
+  verificarRol("ADMINISTRATIVO", "DIRECTIVO", "PREFECTO"),
+  bitacoraConsultar,
+  getEstudiantesParaReporte,
 );
 router.post(
   "/masivo",
