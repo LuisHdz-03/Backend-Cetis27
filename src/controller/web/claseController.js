@@ -778,7 +778,8 @@ const getClase = async (req, res) => {
     }
 
     const filtroPeriodo = await resolverFiltroPeriodo(req.query);
-    filtro = { ...filtro, ...filtroPeriodo };
+    filtro = { ...filtro, ...filtroPeriodo, ...where };
+
     const clases = await prisma.clase.findMany({
       where: filtro,
       skip: (pagina - 1) * limite,
