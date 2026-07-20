@@ -159,12 +159,47 @@ const getDocentes = async (req, res) => {
   try {
     const page = Number(req.query.page) || 1;
     const limit = Number(req.query.limit) || 20;
-
     const skip = (page - 1) * limit;
 
-    const where = {
-      usuario: { activo: true },
-    };
+    const { busqueda, especialidad, activo } = req.query;
+    const where = {};
+    const andConditions = [];
+
+    if (busqueda) {
+      andConditions.push({
+        OR: [
+          { usuario: { nombre: { contains: busqueda, mode: "insensitive" } } },
+          {
+            usuario: {
+              apellidoPaterno: { contains: busqueda, mode: "insensitive" },
+            },
+          },
+          {
+            usuario: {
+              apellidoMaterno: { contains: busqueda, mode: "insensitive" },
+            },
+          },
+          { usuario: { email: { contains: busqueda, mode: "insensitive" } } },
+          { numeroEmpleado: { contains: busqueda, mode: "insensitive" } },
+        ],
+      });
+    }
+
+    if (especialidad) {
+      andConditions.push({
+        especialidad: { nombre: especialidad },
+      });
+    }
+
+    if (activo === "true" || activo === "false") {
+      andConditions.push({
+        usuario: { activo: activo === "true" },
+      });
+    }
+
+    if (andConditions.length > 0) {
+      where.AND = andConditions;
+    }
 
     const [totalRegistros, docentes] = await Promise.all([
       prisma.docente.count({
@@ -235,6 +270,7 @@ const getDocentes = async (req, res) => {
     });
   }
 };
+
 const cargarDocentesMasivos = async (req, res) => {
   try {
     if (!req.file) {

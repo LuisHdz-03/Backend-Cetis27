@@ -168,14 +168,53 @@ const crearEstudiante = async (req, res) => {
 
 const getEstudiantes = async (req, res) => {
   try {
-    // limitamos para que no se sature el servidor
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
     const skip = (page - 1) * limit;
 
-    // 2. Hacer las consultas en paralelo para mayor velocidad
+    const { busqueda, especialidad, activo } = req.query;
+    const where = {};
+    const andConditions = [];
+
+    if (busqueda) {
+      andConditions.push({
+        OR: [
+          { matricula: { contains: busqueda, mode: "insensitive" } },
+          { usuario: { nombre: { contains: busqueda, mode: "insensitive" } } },
+          {
+            usuario: {
+              apellidoPaterno: { contains: busqueda, mode: "insensitive" },
+            },
+          },
+          {
+            usuario: {
+              apellidoMaterno: { contains: busqueda, mode: "insensitive" },
+            },
+          },
+          { usuario: { email: { contains: busqueda, mode: "insensitive" } } },
+        ],
+      });
+    }
+
+    if (especialidad) {
+      andConditions.push({
+        grupo: { especialidad: { nombre: especialidad } },
+      });
+    }
+
+    if (activo === "true" || activo === "false") {
+      andConditions.push({
+        usuario: { activo: activo === "true" },
+      });
+    }
+
+    if (andConditions.length > 0) {
+      where.AND = andConditions;
+    }
+
     const [estudiantes, totalRegistros] = await Promise.all([
       prisma.estudiante.findMany({
+        where,
         skip: skip,
         take: limit,
         orderBy: { idEstudiante: "desc" },
@@ -212,12 +251,11 @@ const getEstudiantes = async (req, res) => {
           tutor: true,
         },
       }),
-      prisma.estudiante.count(),
+      prisma.estudiante.count({ where }),
     ]);
 
     const totalPages = Math.ceil(totalRegistros / limit);
 
-    // respondemos bajo la paginacion y ya
     res.json({
       data: estudiantes,
       pagination: {
@@ -231,6 +269,7 @@ const getEstudiantes = async (req, res) => {
     res.status(500).json({ error: "Error al obtener los alumnos" });
   }
 };
+
 const getEstudiantesParaReporte = async (req, res) => {
   try {
     const { busqueda } = req.query;

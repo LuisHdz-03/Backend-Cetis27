@@ -239,14 +239,50 @@ const getAdministrativos = async (req, res) => {
   try {
     const page = Number(req.query.page) || 1;
     const limit = Number(req.query.limit) || 20;
-
     const skip = (page - 1) * limit;
 
-    const where = {
-      usuario: {
-        activo: true,
-      },
-    };
+    const { busqueda, cargo, activo } = req.query;
+    const where = {};
+    const andConditions = [];
+
+    if (busqueda) {
+      andConditions.push({
+        OR: [
+          { usuario: { nombre: { contains: busqueda, mode: "insensitive" } } },
+          {
+            usuario: {
+              apellidoPaterno: { contains: busqueda, mode: "insensitive" },
+            },
+          },
+          {
+            usuario: {
+              apellidoMaterno: { contains: busqueda, mode: "insensitive" },
+            },
+          },
+          { usuario: { email: { contains: busqueda, mode: "insensitive" } } },
+          { numeroEmpleado: { contains: busqueda, mode: "insensitive" } },
+        ],
+      });
+    }
+
+    if (cargo) {
+      const cargoCrudo =
+        Object.keys(cargoParaMostrar).find(
+          (key) => cargoParaMostrar[key] === cargo,
+        ) || cargo;
+
+      andConditions.push({ cargo: cargoCrudo });
+    }
+
+    if (activo === "true" || activo === "false") {
+      andConditions.push({
+        usuario: { activo: activo === "true" },
+      });
+    }
+
+    if (andConditions.length > 0) {
+      where.AND = andConditions;
+    }
 
     const [totalRegistros, admins] = await Promise.all([
       prisma.administrativo.count({
@@ -325,6 +361,7 @@ const getAdministrativos = async (req, res) => {
     });
   }
 };
+
 const cargarAdministrativosMasivos = async (req, res) => {
   try {
     if (!req.file) {
