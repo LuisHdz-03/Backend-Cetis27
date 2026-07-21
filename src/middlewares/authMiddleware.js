@@ -106,20 +106,23 @@ const verificarToken = async (req, res, next) => {
     });
 
     if (!usuarioActual) {
-      return res
-        .status(401)
-        .json({ error: "El usuario ya no existe en el sistema." });
+      return res.status(401).json({
+        code: "SESSION_EXPIRED",
+        error: "El usuario ya no existe en el sistema.",
+      });
     }
 
     if (!usuarioActual.activo) {
-      return res
-        .status(403)
-        .json({ error: "Esta cuenta ha sido desactivada." });
+      return res.status(403).json({
+        code: "SESSION_EXPIRED",
+        error: "Esta cuenta ha sido desactivada.",
+      });
     }
 
     // Verificar si el rol en el token coincide con la DB (Seguridad ante cambios de permisos)
     if ((decoded.rol || "").toUpperCase() !== usuarioActual.rol.toUpperCase()) {
       return res.status(401).json({
+        code: "SESSION_EXPIRED",
         error: "Tus permisos han cambiado. Por favor, inicia sesión de nuevo.",
       });
     }
