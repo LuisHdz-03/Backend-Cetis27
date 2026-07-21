@@ -386,7 +386,7 @@ const getHistorialAsistencias = async (req, res) => {
       fechaInicio,
       fechaFin,
       page = 1,
-      limit = 50,
+      limit = 10,
     } = req.query;
 
     const whereClause = {};
@@ -433,42 +433,57 @@ const getHistorialAsistencias = async (req, res) => {
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    const [historial, totalRegistros] = await Promise.all([
-      prisma.asistencia.findMany({
-        where: whereClause,
-        skip,
-        take: parseInt(limit),
-        include: {
-          alumno: {
+    // 1. Obtener las fechas de sesión distintas, paginadas
+    const sesionesDistintas = await prisma.asistencia.findMany({
+      where: whereClause,
+      distinct: ["fecha"],
+      select: { fecha: true },
+      orderBy: { fecha: "desc" },
+    });
+
+    const totalSesiones = sesionesDistintas.length;
+    const fechasPagina = sesionesDistintas
+      .slice(skip, skip + parseInt(limit))
+      .map((s) => s.fecha);
+
+    // 2. Traer TODOS los registros de esas fechas específicas (sesiones completas)
+    const historial =
+      fechasPagina.length > 0
+        ? await prisma.asistencia.findMany({
+            where: {
+              ...whereClause,
+              fecha: { in: fechasPagina },
+            },
             include: {
-              usuario: {
-                select: {
-                  nombre: true,
-                  apellidoPaterno: true,
-                  apellidoMaterno: true,
+              alumno: {
+                include: {
+                  usuario: {
+                    select: {
+                      nombre: true,
+                      apellidoPaterno: true,
+                      apellidoMaterno: true,
+                    },
+                  },
+                },
+              },
+              clase: {
+                include: {
+                  materias: true,
                 },
               },
             },
-          },
-          clase: {
-            include: {
-              materias: true,
-            },
-          },
-        },
-        orderBy: [
-          { fecha: "desc" },
-          { alumno: { usuario: { apellidoPaterno: "asc" } } },
-        ],
-      }),
-      prisma.asistencia.count({ where: whereClause }),
-    ]);
+            orderBy: [
+              { fecha: "desc" },
+              { alumno: { usuario: { apellidoPaterno: "asc" } } },
+            ],
+          })
+        : [];
 
     return res.json({
       data: historial.map(formatearAsistenciaSalida),
       pagination: {
-        totalRegistros,
-        totalPages: Math.ceil(totalRegistros / parseInt(limit)),
+        totalRegistros: totalSesiones,
+        totalPages: Math.ceil(totalSesiones / parseInt(limit)),
         currentPage: parseInt(page),
         limit: parseInt(limit),
       },
