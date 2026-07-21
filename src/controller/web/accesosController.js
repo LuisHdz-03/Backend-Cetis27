@@ -133,24 +133,59 @@ const getAccesos = async (req, res) => {
     const limit = parseInt(req.query.limit) || 50;
     const skip = (page - 1) * limit;
 
-    const { fecha, matricula } = req.query;
+    const { fechaInicio, fechaFin, busqueda, grupo, tipo } = req.query;
     const where = {};
+    const andConditions = [];
 
-    if (matricula) {
-      where.alumno = { matricula: matricula };
+    if (busqueda) {
+      andConditions.push({
+        OR: [
+          {
+            alumno: { matricula: { contains: busqueda, mode: "insensitive" } },
+          },
+          {
+            alumno: {
+              usuario: { nombre: { contains: busqueda, mode: "insensitive" } },
+            },
+          },
+          {
+            alumno: {
+              usuario: {
+                apellidoPaterno: { contains: busqueda, mode: "insensitive" },
+              },
+            },
+          },
+        ],
+      });
     }
 
-    if (fecha) {
-      const startOfDay = new Date(fecha);
-      startOfDay.setUTCHours(0, 0, 0, 0);
+    if (grupo) {
+      andConditions.push({
+        alumno: { grupo: { nombre: grupo } },
+      });
+    }
 
-      const endOfDay = new Date(fecha);
-      endOfDay.setUTCHours(23, 59, 59, 999);
+    if (tipo) {
+      andConditions.push({ tipo: tipo.toUpperCase() });
+    }
 
-      where.fechaHora = {
-        gte: startOfDay,
-        lte: endOfDay,
-      };
+    if (fechaInicio || fechaFin) {
+      const rangoFecha = {};
+      if (fechaInicio) {
+        const inicio = new Date(fechaInicio);
+        inicio.setUTCHours(0, 0, 0, 0);
+        rangoFecha.gte = inicio;
+      }
+      if (fechaFin) {
+        const fin = new Date(fechaFin);
+        fin.setUTCHours(23, 59, 59, 999);
+        rangoFecha.lte = fin;
+      }
+      andConditions.push({ fechaHora: rangoFecha });
+    }
+
+    if (andConditions.length > 0) {
+      where.AND = andConditions;
     }
 
     const [accesos, totalRegistros] = await Promise.all([
@@ -195,4 +230,5 @@ const getAccesos = async (req, res) => {
     res.status(500).json({ mensaje: "Error al obtener los accesos" });
   }
 };
+
 module.exports = { registrarAcceso, getAccesos };
