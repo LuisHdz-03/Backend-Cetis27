@@ -224,6 +224,22 @@ const verificarRol = (...rolesPermitidos) => {
   };
 };
 
+const verificarCargo = (...cargosPermitidos) => {
+  return (req, res, next) => {
+    const cargoUsuario = req.usuario.cargo?.toUpperCase();
+
+    if (!cargosPermitidos.includes(cargoUsuario)) {
+      return res.status(403).json({
+        error: "Cargo sin permisos",
+      });
+    }
+
+    next();
+  };
+};
+
+const soloPerfecto = verificarCargo("Prefecto");
+
 // Middlewares predefinidos listos para usar
 const soloDocente = verificarRol("DOCENTE");
 const soloAlumno = verificarRol("ALUMNO");
@@ -246,4 +262,5 @@ module.exports = {
   soloGuardia,
   adminODirectivo,
   accesoEspecialidades,
+  soloPerfecto,
 };

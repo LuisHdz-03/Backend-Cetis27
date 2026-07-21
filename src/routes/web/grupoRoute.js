@@ -7,6 +7,7 @@ const {
 const {
   adminODirectivo,
   soloGuardia,
+  soloPerfecto,
 } = require("../../middlewares/authMiddleware");
 const {
   bitacoraCrear,
@@ -31,7 +32,7 @@ router.get(
   "/",
   adminODirectivo,
   soloGuardia,
-  adminODirectivo,
+  soloPerfecto,
   bitacoraConsultar,
   getGrupos,
 );
