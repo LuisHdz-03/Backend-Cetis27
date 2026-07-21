@@ -102,7 +102,6 @@ const verificarToken = async (req, res, next) => {
         rol: true,
         activo: true,
         nombre: true,
-        cargo: true,
       },
     });
 
@@ -193,7 +192,6 @@ const verificarTokenPadre = async (req, res, next) => {
       idEstudiante: estudianteActual.idEstudiante,
       nombre: estudianteActual.usuario.nombre,
       activo: estudianteActual.usuario.activo,
-      cargo: usuarioActual.cargo,
     };
 
     next();
@@ -226,39 +224,12 @@ const verificarRol = (...rolesPermitidos) => {
   };
 };
 
-const verificarCargo = (...cargosPermitidos) => {
-  return (req, res, next) => {
-    if (!req.usuario) {
-      return res.status(401).json({
-        error: "Autenticación requerida.",
-      });
-    }
-
-    const cargoUsuario = req.usuario.cargo?.toUpperCase();
-
-    const cargosNormalizados = cargosPermitidos.map((cargo) =>
-      cargo.toUpperCase(),
-    );
-
-    if (!cargosNormalizados.includes(cargoUsuario)) {
-      return res.status(403).json({
-        error: "Cargo sin permisos",
-        cargoActual: req.usuario.cargo,
-        cargosPermitidos,
-      });
-    }
-
-    next();
-  };
-};
-
-const soloPerfecto = verificarCargo("PREFECTO");
-
 // Middlewares predefinidos listos para usar
 const soloDocente = verificarRol("DOCENTE");
 const soloAlumno = verificarRol("ALUMNO");
 const soloDirectivo = verificarRol("ADMINISTRATIVO", "DIRECTIVO");
 const soloGuardia = verificarRol("GUARDIA");
+const soloPerfecto = verificarRol("PREFECTO");
 const adminODirectivo = verificarRol("ADMINISTRATIVO", "DIRECTIVO");
 const accesoEspecialidades = verificarRol(
   "ADMINISTRATIVO",
@@ -274,7 +245,7 @@ module.exports = {
   soloAlumno,
   soloDirectivo,
   soloGuardia,
+  soloPerfecto,
   adminODirectivo,
   accesoEspecialidades,
-  soloPerfecto,
 };
