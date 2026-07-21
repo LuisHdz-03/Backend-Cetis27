@@ -8,6 +8,7 @@ const {
   adminODirectivo,
   soloGuardia,
   soloPerfecto,
+  verificarRol,
 } = require("../../middlewares/authMiddleware");
 const {
   bitacoraCrear,
@@ -30,9 +31,7 @@ const {
 router.post("/", adminODirectivo, bitacoraCrear, crearGrupo);
 router.get(
   "/",
-  adminODirectivo,
-  soloGuardia,
-  soloPerfecto,
+  verificarRol("ADMINISTRATIVO", "DIRECTIVO", "GUARDIA", "PREFECTO"),
   bitacoraConsultar,
   getGrupos,
 );

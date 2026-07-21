@@ -22,7 +22,7 @@ const {
 router.post("/", adminODirectivo, bitacoraCrear, crearPeriodo);
 router.get(
   "/",
-  verificarRol("ADMINISTRATIVO", "DIRECTIVO", "DOCENTE"),
+  verificarRol("ADMINISTRATIVO", "DIRECTIVO", "DOCENTE", "PREFECTO"),
   bitacoraConsultar,
   getPeriodos,
 );
@@ -32,12 +32,7 @@ router.get(
   bitacoraConsultar,
   getPeriodoActivo,
 );
-router.put(
-  "/:idPeriodo",
-  adminODirectivo,
-  bitacoraActualizar,
-  updatePeriodo,
-);
+router.put("/:idPeriodo", adminODirectivo, bitacoraActualizar, updatePeriodo);
 router.put(
   "/activar/:idPeriodo",
   adminODirectivo,
