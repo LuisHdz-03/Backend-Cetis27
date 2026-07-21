@@ -211,12 +211,6 @@ const verificarRol = (...rolesPermitidos) => {
       return res.status(401).json({ error: "Autenticación requerida." });
     }
 
-    console.log("====== VERIFICAR ROL ======");
-    console.log("Usuario:", req.usuario.nombre);
-    console.log("Rol BD/token:", req.usuario.rol);
-    console.log("Permitidos:", rolesPermitidos);
-    console.log("============================");
-
     const rolUsuario = req.usuario.rol?.toUpperCase();
     const rolesNormalizados = rolesPermitidos.map((r) => r.toUpperCase());
 
@@ -224,10 +218,8 @@ const verificarRol = (...rolesPermitidos) => {
       return res.status(403).json({
         error: "No tienes permisos suficientes para realizar esta acción.",
         rolRequerido: rolesPermitidos.join(" o "),
-        rolActual: req.usuario.rol,
       });
     }
-
     next();
   };
 };

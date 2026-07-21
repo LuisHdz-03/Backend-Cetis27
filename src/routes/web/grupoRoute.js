@@ -1,8 +1,13 @@
 const { Router } = require("express");
 const router = Router();
-const { uploadExcelSingle } = require("../../middlewares/excelUploadMiddleware");
+const {
+  uploadExcelSingle,
+} = require("../../middlewares/excelUploadMiddleware");
 
-const { adminODirectivo } = require("../../middlewares/authMiddleware");
+const {
+  adminODirectivo,
+  soloGuardia,
+} = require("../../middlewares/authMiddleware");
 const {
   bitacoraCrear,
   bitacoraActualizar,
@@ -22,7 +27,14 @@ const {
 } = require("../../controller/web/gruposController");
 
 router.post("/", adminODirectivo, bitacoraCrear, crearGrupo);
-router.get("/", adminODirectivo, bitacoraConsultar, getGrupos);
+router.get(
+  "/",
+  adminODirectivo,
+  soloGuardia,
+  adminODirectivo,
+  bitacoraConsultar,
+  getGrupos,
+);
 router.get("/:id", adminODirectivo, bitacoraConsultar, getGrupoById);
 router.put("/:id", adminODirectivo, bitacoraActualizar, actualizarGrupo);
 router.delete("/:id", adminODirectivo, bitacoraEliminar, eliminarGrupo);
