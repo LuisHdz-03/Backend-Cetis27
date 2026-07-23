@@ -131,7 +131,7 @@ const registrarAcceso = async (req, res) => {
 const getAccesos = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 50;
+    const limit = parseInt(req.query.limit) || 20;
     const skip = (page - 1) * limit;
 
     const { fechaInicio, fechaFin, busqueda, grupo, tipo } = req.query;
@@ -173,14 +173,10 @@ const getAccesos = async (req, res) => {
     if (fechaInicio || fechaFin) {
       const rangoFecha = {};
       if (fechaInicio) {
-        const inicio = new Date(fechaInicio);
-        inicio.setUTCHours(0, 0, 0, 0);
-        rangoFecha.gte = inicio;
+        rangoFecha.gte = new Date(`${fechaInicio}T00:00:00.000-06:00`);
       }
       if (fechaFin) {
-        const fin = new Date(fechaFin);
-        fin.setUTCHours(23, 59, 59, 999);
-        rangoFecha.lte = fin;
+        rangoFecha.lte = new Date(`${fechaFin}T23:59:59.999-06:00`);
       }
       andConditions.push({ fechaHora: rangoFecha });
     }
