@@ -61,7 +61,7 @@ router.post("/perfil/tutor", bitacoraCrear, actualizartutor);
 
 router.put("/perfil/contrasenia", bitacoraActualizar, cambiarContrasenia);
 
-router.get("/credencial", bitacoraConsultar, getCredencial);
+router.get("/credencial", verificarToken, bitacoraConsultar, getCredencial);
 
 router.get("/accesos", bitacoraConsultar, getHistorialAccesos);
 router.get("/asistencias", bitacoraConsultar, getAsistencias);

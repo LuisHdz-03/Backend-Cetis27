@@ -78,7 +78,7 @@ const registrarAcceso = async (req, res) => {
     }
 
     const nuevoRegistro = await prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(${alumno.idEstudiante})`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${alumno.idEstudiante})`;
 
       const ultimoAcceso = await tx.accesos.findFirst({
         where: { alumnoId: alumno.idEstudiante },
@@ -123,6 +123,7 @@ const registrarAcceso = async (req, res) => {
 
     res.json(respuesta);
   } catch (error) {
+    console.error("Error en registrarAcceso:", error);
     res.status(500).json({ error: "Error al registrar acceso" });
   }
 };
