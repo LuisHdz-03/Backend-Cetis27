@@ -171,13 +171,14 @@ model Clase {
 
 model Asistencia {
   idAsistencia Int        @id @default(autoincrement())
-  fecha        DateTime   @default(now())
+  fecha        DateTime   
+  tomadaEn     DateTime   @default(now()) 
   estatus      String
   claseId      Int
   alumnoId     Int
   alumno       Estudiante @relation(fields: [alumnoId], references: [idEstudiante])
   clase        Clase      @relation(fields: [claseId], references: [idClase])
-
+  @@unique([claseId, alumnoId, fecha])
   @@index([claseId])
   @@index([alumnoId])
   @@index([fecha])
