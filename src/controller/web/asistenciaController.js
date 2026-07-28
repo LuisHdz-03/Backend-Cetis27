@@ -10,19 +10,14 @@ const estatusValidos = ["PRESENTE", "FALTA", "RETARDO", "JUSTIFICADA"];
 const mensajeEstatusValidos =
   "PRESENTE, FALTA, RETARDO, JUSTIFICADA o JUSTIFICADO";
 
+const TOLERANCIA_EDICION_MINUTOS = 10;
+
 const normalizarTexto = (valor) => String(valor || "").trim();
 
 const normalizarEstatusAsistencia = (valor) => {
   const estatus = normalizarTexto(valor).toUpperCase();
-
-  if (estatus === "JUSTIFICADO") {
-    return "JUSTIFICADA";
-  }
-
-  if (estatus === "AUSENTE") {
-    return "FALTA";
-  }
-
+  if (estatus === "JUSTIFICADO") return "JUSTIFICADA";
+  if (estatus === "AUSENTE") return "FALTA";
   return estatus;
 };
 
@@ -30,7 +25,6 @@ const normalizarFechaLocal = (fecha) => {
   if (!(fecha instanceof Date) || Number.isNaN(fecha.getTime())) {
     return null;
   }
-
   return new Date(
     fecha.getFullYear(),
     fecha.getMonth(),
@@ -46,53 +40,35 @@ const parsearFechaAsistencia = (valor) => {
   if (valor === undefined || valor === null || valor === "") {
     return null;
   }
-
   if (valor instanceof Date) {
     return normalizarFechaLocal(valor);
   }
-
   if (typeof valor === "number") {
     const partes = XLSX.SSF.parse_date_code(valor);
-
-    if (!partes) {
-      return null;
-    }
-
+    if (!partes) return null;
     return new Date(partes.y, partes.m - 1, partes.d, 12, 0, 0, 0);
   }
-
   const texto = normalizarTexto(valor);
   const matchIso = texto.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-
   if (matchIso) {
     const [, year, month, day] = matchIso;
     return new Date(Number(year), Number(month) - 1, Number(day), 12, 0, 0, 0);
   }
-
   return normalizarFechaLocal(new Date(texto));
 };
 
 const formatearFechaLocal = (fecha) => {
   const fechaNormalizada = normalizarFechaLocal(fecha);
-
-  if (!fechaNormalizada) {
-    return null;
-  }
-
+  if (!fechaNormalizada) return null;
   const year = fechaNormalizada.getFullYear();
   const month = String(fechaNormalizada.getMonth() + 1).padStart(2, "0");
   const day = String(fechaNormalizada.getDate()).padStart(2, "0");
-
   return `${year}-${month}-${day}`;
 };
 
 const construirRangoFechaLocal = (valor) => {
   const fechaBase = parsearFechaAsistencia(valor);
-
-  if (!fechaBase || Number.isNaN(fechaBase.getTime())) {
-    return null;
-  }
-
+  if (!fechaBase || Number.isNaN(fechaBase.getTime())) return null;
   return {
     inicio: new Date(
       fechaBase.getFullYear(),
@@ -123,22 +99,10 @@ const formatearAsistenciaSalida = (asistencia) => ({
 const buscarEstudiantePorMatricula = async (matricula) => {
   const texto = normalizarTexto(matricula);
   if (!texto) return null;
-
   return prisma.estudiante.findFirst({
-    where: {
-      matricula: {
-        equals: texto,
-        mode: "insensitive",
-      },
-    },
+    where: { matricula: { equals: texto, mode: "insensitive" } },
     include: {
-      grupo: {
-        include: {
-          especialidad: {
-            select: { nombre: true },
-          },
-        },
-      },
+      grupo: { include: { especialidad: { select: { nombre: true } } } },
     },
   });
 };
@@ -152,19 +116,12 @@ const resolverClaseParaAsistencia = async ({
     grupoId: estudiante.grupoId,
     periodo: { activo: true },
   };
-
   if (docenteUsuarioId) {
-    whereBase.docente = {
-      usuarioId: docenteUsuarioId,
-    };
+    whereBase.docente = { usuarioId: docenteUsuarioId };
   }
-
   if (materiaNombre) {
     whereBase.materias = {
-      nombre: {
-        equals: materiaNombre,
-        mode: "insensitive",
-      },
+      nombre: { equals: materiaNombre, mode: "insensitive" },
     };
   }
 
@@ -180,7 +137,6 @@ const resolverClaseParaAsistencia = async ({
         "No se encontro clase activa para el alumno con los filtros proporcionados",
     };
   }
-
   if (clases.length > 1) {
     return {
       ok: false,
@@ -188,7 +144,6 @@ const resolverClaseParaAsistencia = async ({
         "Hay mas de una clase posible. Agrega MATERIA para evitar ambiguedad",
     };
   }
-
   return { ok: true, claseId: clases[0].idClase };
 };
 
@@ -213,12 +168,15 @@ const registrarAsistencia = async (req, res) => {
     const fechaParaGuardar = fecha
       ? parsearFechaAsistencia(fecha)
       : normalizarFechaLocal(new Date());
-    if (isNaN(fechaParaGuardar.getTime())) {
+    if (!fechaParaGuardar || isNaN(fechaParaGuardar.getTime())) {
       return res.status(400).json({ mensaje: "Fecha invalida" });
     }
 
-    const datosPaInsertar = [];
+    const ahora = new Date();
     const errores = [];
+    const bloqueadosPorTiempo = [];
+    const paraInsertar = [];
+    const paraActualizar = [];
 
     for (const item of listaFuente) {
       const estatus = normalizarEstatusAsistencia(item.estatus);
@@ -231,7 +189,6 @@ const registrarAsistencia = async (req, res) => {
         });
         continue;
       }
-
       if (!estatusValidos.includes(estatus)) {
         errores.push({
           referencia: matricula,
@@ -254,39 +211,88 @@ const registrarAsistencia = async (req, res) => {
         materiaNombre: materiaNormalizada,
         docenteUsuarioId,
       });
-
       if (!claseResuelta.ok) {
         errores.push({ referencia: matricula, error: claseResuelta.error });
         continue;
       }
+      const existente = await prisma.asistencia.findUnique({
+        where: {
+          claseId_alumnoId_fecha: {
+            claseId: claseResuelta.claseId,
+            alumnoId: estudiante.idEstudiante,
+            fecha: fechaParaGuardar,
+          },
+        },
+      });
 
-      datosPaInsertar.push({
-        claseId: claseResuelta.claseId,
-        alumnoId: estudiante.idEstudiante,
+      if (!existente) {
+        paraInsertar.push({
+          claseId: claseResuelta.claseId,
+          alumnoId: estudiante.idEstudiante,
+          estatus,
+          fecha: fechaParaGuardar,
+          tomadaEn: ahora,
+        });
+        continue;
+      }
+
+      const minutosTranscurridos =
+        (ahora.getTime() - new Date(existente.tomadaEn).getTime()) / 60000;
+
+      if (minutosTranscurridos > TOLERANCIA_EDICION_MINUTOS) {
+        bloqueadosPorTiempo.push({
+          referencia: matricula,
+          error: `El tiempo de edición (${TOLERANCIA_EDICION_MINUTOS} min) ya expiró para este alumno.`,
+        });
+        continue;
+      }
+      paraActualizar.push({
+        idAsistencia: existente.idAsistencia,
         estatus,
-        fecha: fechaParaGuardar,
       });
     }
 
-    if (datosPaInsertar.length === 0) {
+    if (paraInsertar.length === 0 && paraActualizar.length === 0) {
       return res.status(400).json({
         mensaje: "No se pudo registrar ninguna asistencia",
         errores,
+        bloqueadosPorTiempo,
       });
     }
 
-    const resultado = await prisma.asistencia.createMany({
-      data: datosPaInsertar,
-      skipDuplicates: true,
+    const resultado = await prisma.$transaction(async (tx) => {
+      let insertados = 0;
+      let actualizados = 0;
+
+      if (paraInsertar.length > 0) {
+        const r = await tx.asistencia.createMany({ data: paraInsertar });
+        insertados = r.count;
+      }
+
+      for (const item of paraActualizar) {
+        await tx.asistencia.update({
+          where: { idAsistencia: item.idAsistencia },
+          data: { estatus: item.estatus },
+        });
+        actualizados++;
+      }
+
+      return { insertados, actualizados };
     });
 
     return res.status(201).json({
       mensaje: "Asistencia registrada correctamente",
-      totalRegistros: resultado.count,
+      totalRegistros: resultado.insertados + resultado.actualizados,
+      insertados: resultado.insertados,
+      actualizados: resultado.actualizados,
       fecha: formatearFechaLocal(fechaParaGuardar),
+      tomadaEn: ahora,
+      ventanaEdicionMinutos: TOLERANCIA_EDICION_MINUTOS,
       errores,
+      bloqueadosPorTiempo,
     });
   } catch (error) {
+    console.error("Error en registrarAsistencia:", error);
     return res
       .status(500)
       .json({ mensaje: "Error interno al tomar las asistencias" });
@@ -296,26 +302,19 @@ const registrarAsistencia = async (req, res) => {
 const getAsisPorFecha = async (req, res) => {
   try {
     const { claseId, fecha } = req.query;
-
     if (!claseId || !fecha) {
       return res.status(400).json({ error: "Se requiere claseId y fecha." });
     }
-
     const rangoFecha = construirRangoFechaLocal(fecha);
-
     if (!rangoFecha) {
       return res.status(400).json({ error: "Fecha invalida. Usa YYYY-MM-DD." });
     }
-
     const { inicio, fin } = rangoFecha;
 
     const asistencias = await prisma.asistencia.findMany({
       where: {
         claseId: parseInt(claseId, 10),
-        fecha: {
-          gte: inicio,
-          lte: fin,
-        },
+        fecha: { gte: inicio, lte: fin },
       },
       include: {
         alumno: {
@@ -330,9 +329,7 @@ const getAsisPorFecha = async (req, res) => {
           },
         },
       },
-      orderBy: {
-        alumno: { usuario: { apellidoPaterno: "asc" } },
-      },
+      orderBy: { alumno: { usuario: { apellidoPaterno: "asc" } } },
     });
 
     return res.json(asistencias.map(formatearAsistenciaSalida));
@@ -347,17 +344,14 @@ const justificarFalta = async (req, res) => {
     const asistencia = await prisma.asistencia.findUnique({
       where: { idAsistencia: parseInt(idAsistencia, 10) },
     });
-
     if (!asistencia) {
       return res.status(404).json({ error: "Registro no encontrado" });
     }
 
     const fechaRegistro = new Date(asistencia.fecha);
     const ahora = new Date();
-
     const esHoy =
       formatearFechaLocal(fechaRegistro) === formatearFechaLocal(ahora);
-
     if (!esHoy) {
       return res.status(403).json({
         error: "El tiempo expiro. Solo se puede justificar el mismo dia",
@@ -406,20 +400,18 @@ const getHistorialAsistencias = async (req, res) => {
       whereClause.fecha = {};
       if (fechaInicio) {
         const rangoInicio = construirRangoFechaLocal(fechaInicio);
-        if (!rangoInicio) {
+        if (!rangoInicio)
           return res
             .status(400)
             .json({ error: "fechaInicio invalida. Usa YYYY-MM-DD." });
-        }
         whereClause.fecha.gte = rangoInicio.inicio;
       }
       if (fechaFin) {
         const rangoFin = construirRangoFechaLocal(fechaFin);
-        if (!rangoFin) {
+        if (!rangoFin)
           return res
             .status(400)
             .json({ error: "fechaFin invalida. Usa YYYY-MM-DD." });
-        }
         whereClause.fecha.lte = rangoFin.fin;
       }
     }
@@ -433,7 +425,6 @@ const getHistorialAsistencias = async (req, res) => {
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    // 1. Obtener las fechas de sesión distintas, paginadas
     const sesionesDistintas = await prisma.asistencia.findMany({
       where: whereClause,
       distinct: ["fecha"],
@@ -446,14 +437,10 @@ const getHistorialAsistencias = async (req, res) => {
       .slice(skip, skip + parseInt(limit))
       .map((s) => s.fecha);
 
-    // 2. Traer TODOS los registros de esas fechas específicas (sesiones completas)
     const historial =
       fechasPagina.length > 0
         ? await prisma.asistencia.findMany({
-            where: {
-              ...whereClause,
-              fecha: { in: fechasPagina },
-            },
+            where: { ...whereClause, fecha: { in: fechasPagina } },
             include: {
               alumno: {
                 include: {
@@ -466,11 +453,7 @@ const getHistorialAsistencias = async (req, res) => {
                   },
                 },
               },
-              clase: {
-                include: {
-                  materias: true,
-                },
-              },
+              clase: { include: { materias: true } },
             },
             orderBy: [
               { fecha: "desc" },
@@ -480,7 +463,7 @@ const getHistorialAsistencias = async (req, res) => {
         : [];
 
     return res.json({
-      data: historial.map(formatearAsistenciaSalida),
+      data: historial.map(formatearAsistenciaSalida), // ⬅️ ya incluye tomadaEn
       pagination: {
         totalRegistros: totalSesiones,
         totalPages: Math.ceil(totalSesiones / parseInt(limit)),
@@ -498,29 +481,25 @@ const getHistorialAsistencias = async (req, res) => {
 const exportarHistorialAsistenciasExcel = async (req, res) => {
   try {
     const { claseId, alumnoId, fechaInicio, fechaFin } = req.query;
-
     const whereClause = {};
     if (claseId) whereClause.claseId = parseInt(claseId, 10);
     if (alumnoId) whereClause.alumnoId = parseInt(alumnoId, 10);
-
     if (fechaInicio || fechaFin) {
       whereClause.fecha = {};
       if (fechaInicio) {
         const rangoInicio = construirRangoFechaLocal(fechaInicio);
-        if (!rangoInicio) {
+        if (!rangoInicio)
           return res
             .status(400)
             .json({ error: "fechaInicio invalida. Usa YYYY-MM-DD." });
-        }
         whereClause.fecha.gte = rangoInicio.inicio;
       }
       if (fechaFin) {
         const rangoFin = construirRangoFechaLocal(fechaFin);
-        if (!rangoFin) {
+        if (!rangoFin)
           return res
             .status(400)
             .json({ error: "fechaFin invalida. Usa YYYY-MM-DD." });
-        }
         whereClause.fecha.lte = rangoFin.fin;
       }
     }
@@ -539,11 +518,7 @@ const exportarHistorialAsistenciasExcel = async (req, res) => {
             },
           },
         },
-        clase: {
-          include: {
-            materias: true,
-          },
-        },
+        clase: { include: { materias: true } },
       },
       orderBy: [{ fecha: "desc" }],
     });
@@ -560,7 +535,6 @@ const exportarHistorialAsistenciasExcel = async (req, res) => {
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(filas);
     XLSX.utils.book_append_sheet(wb, ws, "Asistencias");
-
     const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
     const nombreArchivo = `historial_asistencias_${Date.now()}.xlsx`;
 
@@ -572,7 +546,6 @@ const exportarHistorialAsistenciasExcel = async (req, res) => {
       "Content-Disposition",
       `attachment; filename="${nombreArchivo}"`,
     );
-
     return res.send(buffer);
   } catch (error) {
     return res.status(500).json({ error: "Error al exportar asistencias" });
@@ -595,12 +568,8 @@ const descargarPlantillaAsistencias = async (req, res) => {
         MATERIA: "PROGRAMACION WEB",
       },
     ];
-
     const instrucciones = [
-      {
-        CAMPO: "FECHA",
-        DESCRIPCION: "Obligatorio. Formato YYYY-MM-DD",
-      },
+      { CAMPO: "FECHA", DESCRIPCION: "Obligatorio. Formato YYYY-MM-DD" },
       {
         CAMPO: "ESTATUS",
         DESCRIPCION: `Obligatorio. ${mensajeEstatusValidos}`,
@@ -615,15 +584,12 @@ const descargarPlantillaAsistencias = async (req, res) => {
           "Opcional. Recomendado cuando el alumno tiene mas de una clase activa",
       },
     ];
-
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(filasEjemplo);
     XLSX.utils.book_append_sheet(wb, ws, "Plantilla_Asistencias");
     const wsInstrucciones = XLSX.utils.json_to_sheet(instrucciones);
     XLSX.utils.book_append_sheet(wb, wsInstrucciones, "Instrucciones");
-
     const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
-
     res.setHeader(
       "Content-Type",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -632,7 +598,6 @@ const descargarPlantillaAsistencias = async (req, res) => {
       "Content-Disposition",
       'attachment; filename="plantilla_asistencias.xlsx"',
     );
-
     return res.send(buffer);
   } catch (error) {
     return res
@@ -646,9 +611,7 @@ const cargarAsistenciasMasivas = async (req, res) => {
     if (!req.file) {
       return res.status(400).json({ error: "No se subio ningun archivo" });
     }
-
     const datosExcel = parseExcelRowsSafe(req.file.buffer);
-
     const validacionCarga = validateBulkRows(datosExcel);
     if (validacionCarga) {
       return res
@@ -664,7 +627,6 @@ const cargarAsistenciasMasivas = async (req, res) => {
     for (let i = 0; i < datosExcel.length; i++) {
       const fila = datosExcel[i];
       const numeroFila = i + 2;
-
       const matricula = normalizarTexto(fila["MATRICULA"]);
       const materiaNombre = normalizarTexto(fila["MATERIA"]);
       const fecha = parsearFechaAsistencia(fila["FECHA"]);
@@ -677,7 +639,6 @@ const cargarAsistenciasMasivas = async (req, res) => {
         });
         continue;
       }
-
       if (isNaN(fecha.getTime())) {
         errores.push({
           fila: numeroFila,
@@ -685,7 +646,6 @@ const cargarAsistenciasMasivas = async (req, res) => {
         });
         continue;
       }
-
       if (!estatusValidos.includes(estatus)) {
         errores.push({
           fila: numeroFila,
@@ -708,12 +668,8 @@ const cargarAsistenciasMasivas = async (req, res) => {
         materiaNombre,
         docenteUsuarioId,
       });
-
       if (!claseResuelta.ok) {
-        errores.push({
-          fila: numeroFila,
-          error: claseResuelta.error,
-        });
+        errores.push({ fila: numeroFila, error: claseResuelta.error });
         continue;
       }
 
