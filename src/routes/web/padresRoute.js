@@ -15,8 +15,7 @@ const {
   consultarReportesEstudiante,
 } = require("../../controller/movil/estatusEstudianteController");
 
-
-router.post("/login", loginPadre);
+router.post("/login", verificarTokenPadre, loginPadre);
 
 router.get(
   "/estatus/:idEstudiante",
