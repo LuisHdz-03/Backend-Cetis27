@@ -1,23 +1,24 @@
 const { Router } = require("express");
 const router = Router();
 
-const {
-  verificarToken,
-  verificarTokenPadre,
-} = require("../../middlewares/authMiddleware");
+const { verificarToken } = require("../../middlewares/authMiddleware");
+
 const {
   bitacoraLogin,
   bitacoraConsultar,
   bitacoraActualizar,
   bitacoraCrear,
 } = require("../../middlewares/bitacoraMiddleware");
+
 const uploads = require("../../middlewares/uploadMiddleware");
 const { loginLimiter } = require("../../middlewares/rateLimitMiddleware");
+
 const { login } = require("../../controller/auth/authController");
-const { loginPadre } = require("../../controller/web/padresController");
-const {
-  consultarEstatusCompletoEstudiante,
-} = require("../../controller/movil/estatusEstudianteController");
+
+// =====================================
+// CONTROLADORES APP MÓVIL ESTUDIANTE
+// =====================================
+
 const {
   getAlumnosMovil,
   uploadFotiko,
@@ -29,42 +30,63 @@ const {
   cambiarContrasenia,
 } = require("../../controller/movil/estudianteMoController");
 
+// =====================================
+// GENERAL
+// =====================================
+
 router.get("/", (req, res) => {
-  res.json({ mensaje: "Bienvenido a la App Móvil (Estudiantes/Docentes)" });
+  res.json({
+    mensaje: "Bienvenido a la App Móvil (Estudiantes/Docentes)",
+  });
 });
 
+// =====================================
+// AUTH
+// =====================================
+
 router.post("/auth/login", loginLimiter, bitacoraLogin, login);
-router.post("/padres/login", loginPadre);
-router.post("/padre/login", loginPadre);
-router.post("/movil/padres/login", loginPadre);
-router.post("/movil/padre/login", loginPadre);
-router.get(
-  "/padres/estatus-completo/:idEstudiante",
-  verificarTokenPadre,
-  consultarEstatusCompletoEstudiante,
-);
-router.get(
-  "/padre/estatus-completo/:idEstudiante",
-  verificarTokenPadre,
-  consultarEstatusCompletoEstudiante,
-);
+
+// =====================================
+// APP MÓVIL ESTUDIANTE
+// =====================================
+
 router.use(verificarToken);
 
+// Perfil estudiante
+
 router.get("/perfil", bitacoraConsultar, getAlumnosMovil);
+
+// Foto perfil
+
 router.put(
   "/perfil/foto",
   uploads.single("fotoPerfil"),
   bitacoraActualizar,
   uploadFotiko,
 );
+
+// Actualizar tutor
+
 router.post("/perfil/tutor", bitacoraCrear, actualizartutor);
+
+// Cambiar contraseña
 
 router.put("/perfil/contrasenia", bitacoraActualizar, cambiarContrasenia);
 
-router.get("/credencial", verificarToken, bitacoraConsultar, getCredencial);
+// Credencial
+
+router.get("/credencial", bitacoraConsultar, getCredencial);
+
+// Historial accesos
 
 router.get("/accesos", bitacoraConsultar, getHistorialAccesos);
+
+// Asistencias
+
 router.get("/asistencias", bitacoraConsultar, getAsistencias);
+
+// Reportes
+
 router.get("/reportes", bitacoraConsultar, getReportesEstudianteMovil);
 
 module.exports = router;
