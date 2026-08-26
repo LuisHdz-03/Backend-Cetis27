@@ -22,7 +22,7 @@ const SESSION_DURATION_SECONDS = {
 };
 
 const PLATFORMS = new Set(Object.keys(SESSION_DURATION_SECONDS));
-const MENSAJE_CREDENCIALES_INVALIDAS = "Credenciales inválidas.";
+const MENSAJE_CREDENCIALES_INVALIDAS = "Usuario o contraseña incorrectos.";
 
 const login = async (req, res) => {
   try {

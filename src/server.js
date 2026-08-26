@@ -5,10 +5,13 @@ const env = require("./config/env");
 
 let server;
 let isShuttingDown = false;
+let dbKeepAliveInterval;
 
 const gracefulShutdown = async () => {
   if (isShuttingDown) return;
   isShuttingDown = true;
+
+  clearInterval(dbKeepAliveInterval);
 
   try {
     if (server) {
@@ -32,6 +35,16 @@ async function main() {
   try {
     await prisma.$connect();
     server = app.listen(env.port, () => {});
+    server.timeout = 30000;
+    server.keepAliveTimeout = 65000;
+
+    dbKeepAliveInterval = setInterval(async () => {
+      try {
+        await prisma.$queryRaw`SELECT 1`;
+      } catch {
+      }
+    }, 4 * 60 * 1000);
+    dbKeepAliveInterval.unref();
 
     process.on("SIGTERM", gracefulShutdown);
     process.on("SIGINT", gracefulShutdown);
