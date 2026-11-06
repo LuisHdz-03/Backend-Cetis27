@@ -7,3 +7,4 @@ node_modules
 /artillery/*.csv
 /artillery/*.json
 !/artillery/*.csv.example
+hashed.js

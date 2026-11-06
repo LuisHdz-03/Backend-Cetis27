@@ -5,6 +5,23 @@ const extraerIpDesdeDetalle = (detalle = "") => {
   return match ? match[1].trim() : "N/D";
 };
 
+const formatearDetalle = (detalle = "") => {
+  if (!detalle) return "Sin detalles registrados";
+
+  try {
+    if (typeof detalle === "string" && (detalle.startsWith("{") || detalle.startsWith("["))) {
+      const parsed = JSON.parse(detalle);
+      if (parsed.message) return parsed.message;
+      return JSON.stringify(parsed, null, 2);
+    }
+  } catch (e) {}
+
+  let textoLimpio = String(detalle).trim();
+  textoLimpio = textoLimpio.replace(/\|\s*IP:\s*[^|]+/gi, "").trim();
+
+  return textoLimpio || "Acción realizada correctamente";
+};
+
 const getBitacora = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
@@ -32,6 +49,7 @@ const getBitacora = async (req, res) => {
         },
       ];
     }
+
     const [logs, totalRegistros] = await Promise.all([
       prisma.bitacora.findMany({
         where,
@@ -55,13 +73,12 @@ const getBitacora = async (req, res) => {
     const logsMapeados = logs.map((log) => ({
       idBitacora: log.idBitacora || log.id,
       accion: log.accion,
-      detalles: log.detalle,
+      detalles: formatearDetalle(log.detalle),
       fechaHora: log.fecha,
       ipBase: extraerIpDesdeDetalle(log.detalle),
       usuario: log.usuario,
     }));
 
-    // Retornamos el formato paginado
     res.json({
       data: logsMapeados,
       pagination: {
@@ -76,18 +93,34 @@ const getBitacora = async (req, res) => {
   }
 };
 
+/**
+ * Función principal para registrar acciones importantes.
+ * Filtra automáticamente logins móviles innecesarios y asegura formato limpio.
+ */
 const registrarAccion = async (usuarioId, accion, detalle) => {
   try {
     if (!usuarioId) return;
 
+    // Ignorar inicios de sesión desde la app móvil para no saturar con ruido
+    if (accion === "LOGIN" && String(detalle).includes("MOVIL")) {
+      return; 
+    }
+
+    let detalleFinal = detalle;
+    if (typeof detalle === "object") {
+      detalleFinal = JSON.stringify(detalle);
+    }
+
     await prisma.bitacora.create({
       data: {
         usuarioId: parseInt(usuarioId),
-        accion: accion,
-        detalle: detalle,
+        accion: accion.toUpperCase(), // Ej: CREAR, ACTUALIZAR, ELIMINAR, LOGIN
+        detalle: detalleFinal,
       },
     });
-  } catch (error) {}
+  } catch (error) {
+    console.error("Error al registrar en bitácora:", error);
+  }
 };
 
 module.exports = { getBitacora, registrarAccion };
