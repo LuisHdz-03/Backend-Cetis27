@@ -14,10 +14,17 @@ const formatearDetalle = (detalle = "") => {
       if (parsed.message) return parsed.message;
       return JSON.stringify(parsed, null, 2);
     }
-  } catch (e) {}
+  } catch (error) {
+    console.error("Error al interpretar el detalle de bitácora:", error);
+  }
 
   let textoLimpio = String(detalle).trim();
   textoLimpio = textoLimpio.replace(/\|\s*IP:\s*[^|]+/gi, "").trim();
+  textoLimpio = textoLimpio
+    .split("|")
+    .map((parte) => parte.trim())
+    .filter((parte) => !/^Campos:/i.test(parte))
+    .join(" | ");
 
   return textoLimpio || "Acción realizada correctamente";
 };

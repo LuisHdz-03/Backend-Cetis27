@@ -5,17 +5,6 @@ const CONSULTA_VENTANA_SEGUNDOS = Number(
   process.env.BITACORA_CONSULTA_WINDOW_SECONDS || 300,
 );
 const MAX_DETALLE_LENGTH = 1000;
-const CAMPOS_SENSIBLES = [
-  "password",
-  "passwordactual",
-  "passwordnueva",
-  "passwordconfirmar",
-  "token",
-  "authorization",
-  "resetpasswordtokenhash",
-  "x-layout-sync-key",
-  "curp",
-];
 
 const registrarEnBitacora = (accionBase) => {
   return async (req, res, next) => {
@@ -146,13 +135,6 @@ function construirFirmaConsulta(req) {
     .slice(0, 16);
 }
 
-function limpiarCamposSensibles(body = {}) {
-  const llaves = Object.keys(body || {});
-  return llaves.filter(
-    (key) => !CAMPOS_SENSIBLES.includes(String(key).toLowerCase()),
-  );
-}
-
 function construirDetalle(
   req,
   responseData,
@@ -161,20 +143,18 @@ function construirDetalle(
 ) {
   const metodo = req.method;
   const detalles = [];
+  const nombreEntidad = obtenerNombreEntidad(responseData);
+  const mensaje = obtenerMensajeBitacora(responseData, metodo, nombreEntidad);
 
   switch (metodo) {
     case "POST":
-      if (req.body?.nombre) detalles.push(`Nombre: ${req.body.nombre}`);
-      if (req.body?.email) detalles.push(`Email: ${req.body.email}`);
-      if (req.body?.matricula)
-        detalles.push(`Matrícula: ${req.body.matricula}`);
-      if (responseData?.mensaje) detalles.push(responseData.mensaje);
+      if (mensaje) detalles.push(mensaje);
       break;
 
     case "PUT":
     case "PATCH":
       if (req.params.id) detalles.push(`ID: ${req.params.id}`);
-      if (responseData?.mensaje) detalles.push(responseData.mensaje);
+      if (mensaje) detalles.push(mensaje);
       break;
 
     case "DELETE":
@@ -183,13 +163,59 @@ function construirDetalle(
       break;
   }
 
-  const camposEditados = limpiarCamposSensibles(req.body);
-  if (["POST", "PUT", "PATCH"].includes(metodo) && camposEditados.length > 0) {
-    detalles.push(`Campos: ${camposEditados.slice(0, 12).join(", ")}`);
-  }
-
   const detalleFinal = detalles.join(" | ") || "Sin detalles adicionales";
   return detalleFinal.slice(0, MAX_DETALLE_LENGTH);
+}
+
+function obtenerMensajeBitacora(responseData, metodo, nombreEntidad) {
+  let mensaje = responseData?.mensaje;
+  if (!mensaje) return "";
+
+  if (responseData.materia && metodo === "POST") {
+    mensaje = "Nueva materia registrada";
+  } else if (responseData.grupo && ["PUT", "PATCH"].includes(metodo)) {
+    mensaje = "Grupo actualizado correctamente";
+  }
+
+  const agregarNombre =
+    nombreEntidad && ["POST", "PUT", "PATCH"].includes(metodo);
+  return agregarNombre ? `${mensaje}: ${nombreEntidad}` : mensaje;
+}
+
+function obtenerNombreEntidad(responseData) {
+  const estudiante = responseData?.estudiante;
+  if (estudiante) {
+    const usuario = estudiante.usuario || estudiante;
+    const nombreCompleto = [
+      usuario.nombre,
+      usuario.apellidoPaterno,
+      usuario.apellidoMaterno,
+    ]
+      .filter(Boolean)
+      .join(" ");
+    if (nombreCompleto) return nombreCompleto;
+  }
+
+  const materia = responseData?.materia;
+  if (materia?.nombre) return materia.nombre;
+
+  const grupo = responseData?.grupo;
+  if (grupo) {
+    const grado = Number(grupo.grado);
+    const sufijoGrado =
+      grado === 1 ? "er" : grado === 2 ? "do" : grado === 3 ? "er" : "to";
+    const semestre =
+      grupo.grado !== undefined &&
+      grupo.grado !== null &&
+      Number.isFinite(grado)
+        ? `${grado}${sufijoGrado} Semestre`
+        : "";
+    const especialidad = grupo.especialidad?.nombre || grupo.nombre;
+    const descripcion = [semestre, especialidad].filter(Boolean).join(" - ");
+    if (descripcion) return descripcion;
+  }
+
+  return "";
 }
 
 async function registrarAccionManual(usuarioId, accion, detalle) {
