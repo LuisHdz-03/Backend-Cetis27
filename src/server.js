@@ -32,7 +32,7 @@ async function main() {
   try {
     await prisma.$connect();
     server = app.listen(env.port, () => {});
-    server.timeout = 30000;
+    server.timeout = 60000;
     server.keepAliveTimeout = 65000;
 
     process.on("SIGTERM", gracefulShutdown);
